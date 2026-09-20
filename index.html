@@ -29,11 +29,22 @@ a{color:var(--pea2);text-decoration:none}
 .brandmark{width:44px;height:44px;border-radius:12px;background:var(--pea);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Kanit';font-size:16px}
 
 /* --- shell --- */
-.topbar{background:var(--pea);color:#fff;padding:0 20px;height:58px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:40}
-.topbar .t{font-family:'Kanit';font-weight:500;font-size:17px}
-.chipyear{display:flex;gap:4px;background:#5D2C78;padding:4px;border-radius:10px}
-.chipyear button{border:0;background:transparent;color:#E7DDF0;padding:7px 14px;border-radius:7px;cursor:pointer}
+.topbar{background:var(--pea);color:#fff;padding:9px 20px;min-height:58px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:40}
+.tb-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.tb-text{min-width:0}
+.topbar .t{font-family:'Kanit';font-weight:500;font-size:16px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .t2{font-size:11px;color:#D6C6E4;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.chipyear{display:flex;gap:4px;background:#5D2C78;padding:3px;border-radius:10px}
+.chipyear button{border:0;background:transparent;color:#E7DDF0;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap}
 .chipyear button.on{background:#fff;color:var(--pea);font-weight:600}
+.iconbtn{width:38px;height:38px;padding:0;display:flex;align-items:center;justify-content:center;border:1px solid #7A4C97;border-radius:10px;background:transparent;color:#E7DDF0;cursor:pointer;flex-shrink:0}
+.iconbtn:hover{background:#5D2C78}
+/* --- หน้ารอโหลด --- */
+#splash{position:fixed;inset:0;background:var(--ground);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:80}
+.spin{width:42px;height:42px;border-radius:999px;border:3px solid #E0DAE6;border-top-color:var(--pea);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.splash-brand{display:flex;align-items:center;gap:10px}
 .tabs{background:var(--card);border-bottom:1px solid var(--line);padding:0 20px;display:flex;gap:22px;position:sticky;top:58px;z-index:39;overflow-x:auto}
 .tabs button{border:0;background:transparent;padding:14px 0;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--pea);font-weight:600;border-bottom-color:var(--pea)}
@@ -80,7 +91,9 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .bottomnav{display:none}
 @media (max-width:760px){
   main{padding:14px 14px 90px}
-  .topbar{padding:0 14px}
+  .topbar{padding:8px 12px;gap:8px}
+  .topbar .t{font-size:15px}
+  .chipyear button{padding:6px 10px;font-size:12px}
   .tabs{display:none}
   .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:50}
   .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
@@ -97,8 +110,21 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 </head>
 <body>
 
+<!-- ======= หน้ารอโหลด ======= -->
+<div id="splash">
+  <div class="splash-brand">
+    <div class="brandmark">อล</div>
+    <div>
+      <div class="kanit" style="font-size:17px">งานตัดต้นไม้</div>
+      <div class="sub">กฟส.อ่าวลึก</div>
+    </div>
+  </div>
+  <div class="spin"></div>
+  <div id="splashMsg" class="sub">กำลังตรวจสอบสิทธิ์…</div>
+</div>
+
 <!-- ======= เข้าสู่ระบบ ======= -->
-<div id="login">
+<div id="login" class="hide">
   <form class="loginbox" onsubmit="doLogin(event)">
     <div class="brand">
       <div class="brandmark">อล</div>
@@ -124,12 +150,19 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 <!-- ======= ตัวแอป ======= -->
 <div id="app" class="hide">
   <div class="topbar">
-    <div class="brandmark" style="width:34px;height:34px;border-radius:9px;background:#C9A227;color:#3A1550;font-size:13px">อล</div>
-    <div class="t">งานตัดต้นไม้ กฟส.อ่าวลึก</div>
-    <div style="flex:1"></div>
-    <div class="chipyear" id="yearSwitch"></div>
-    <div id="whoami" class="sub" style="color:#E7DDF0"></div>
-    <button class="btn ghost" style="height:36px;padding:0 12px" onclick="logout()">ออก</button>
+    <div class="tb-left">
+      <div class="brandmark" style="width:34px;height:34px;border-radius:9px;background:#C9A227;color:#3A1550;font-size:13px;flex-shrink:0">อล</div>
+      <div class="tb-text">
+        <div class="t">งานตัดต้นไม้</div>
+        <div class="t2">กฟส.อ่าวลึก · <span id="whoami"></span></div>
+      </div>
+    </div>
+    <div class="tb-right">
+      <div class="chipyear" id="yearSwitch"></div>
+      <button class="iconbtn" onclick="logout()" aria-label="ออกจากระบบ" title="ออกจากระบบ">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 19H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
+      </button>
+    </div>
   </div>
 
   <div class="tabs" id="tabs">
@@ -188,6 +221,19 @@ function toast(msg, ms=2400){
   setTimeout(()=>t.remove(), ms);
 }
 
+function splash(msg){
+  const el0 = $('#splash');
+  if(el0){ el0.classList.remove('hide'); if(msg) $('#splashMsg').textContent = msg; }
+}
+function splashOff(){ const e = $('#splash'); if(e) e.classList.add('hide'); }
+function showLogin(msg){
+  splashOff();
+  $('#login').classList.remove('hide');
+  if(msg) $('#loginMsg').textContent = msg;
+  const u = $('#uname');
+  if(u && !u.value) u.focus();
+}
+
 async function api(action, payload={}){
   const body = Object.assign({action, user:S.user?S.user.name:'', token:S.token}, payload);
   const res = await fetch(API_URL, {
@@ -240,13 +286,13 @@ async function autoLogin(user, password){
       body: JSON.stringify({action:'login', user, password})
     });
     const out = await res.json();
-    if(!out.ok) return false;
+    if(!out.ok){ showLogin(); return false; }
     S.user = out.user; S.token = out.token;
     localStorage.setItem(LS+'_auth', JSON.stringify({user:S.user, token:S.token}));
     await startApp();
     flushQueue(); logAppOpen();
     return true;
-  }catch(e){ return false; }
+  }catch(e){ showLogin(); return false; }
 }
 
 /* ============ เข้าสู่ระบบ ============ */
@@ -255,6 +301,7 @@ async function doLogin(ev){
   const user = $('#uname').value.trim();
   const password = $('#upass').value;
   $('#loginBtn').disabled = true; $('#loginMsg').textContent='';
+  splash('กำลังตรวจสอบสิทธิ์…');
   try{
     const res = await fetch(API_URL, {
       method:'POST', redirect:'follow',
@@ -269,6 +316,8 @@ async function doLogin(ev){
     await startApp();
     logAppOpen();
   }catch(e){
+    splashOff();
+    $('#login').classList.remove('hide');
     $('#loginMsg').textContent = e.message;
   }finally{
     $('#loginBtn').disabled = false;
@@ -284,9 +333,15 @@ function logout(){
 /* ============ เริ่มต้นแอป ============ */
 async function startApp(){
   $('#login').classList.add('hide');
-  $('#app').classList.remove('hide');
+  splash('กำลังโหลดข้อมูล…');
   if(S.user) $('#whoami').textContent = S.user.name || '';
   await loadYear(S.year);
+  if(!S.data){
+    splash('โหลดข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง');
+    return;
+  }
+  $('#app').classList.remove('hide');
+  splashOff();
 }
 
 async function loadYear(year){
@@ -978,7 +1033,12 @@ async function renderMap(){
   if(c.name) $('#uname').value = c.name;
   let skip = false;
   try{ skip = !!sessionStorage.getItem('tree_skipauto'); }catch(e){}
-  if(!skip && c.name && c.pass) autoLogin(c.name, c.pass);
+  if(!skip && c.name && c.pass){
+    splash('กำลังเข้าสู่ระบบด้วยบัญชีศูนย์รวมงาน…');
+    autoLogin(c.name, c.pass);
+  }else{
+    showLogin();
+  }
 })();
 </script>
 </body>
