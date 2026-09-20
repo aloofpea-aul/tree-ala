@@ -108,12 +108,16 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
       </div>
     </div>
     <div class="field" style="margin-bottom:12px">
-      <label for="email">อีเมลผู้ใช้งาน</label>
-      <input class="inp" id="email" type="email" style="width:100%" placeholder="name@pea.co.th" required>
+      <label for="uname">ชื่อผู้ใช้</label>
+      <input class="inp" id="uname" type="text" style="width:100%" placeholder="ชื่อที่ใช้ในระบบ SLD" autocomplete="username" required>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label for="upass">รหัสผ่าน</label>
+      <input class="inp" id="upass" type="password" style="width:100%" autocomplete="current-password" required>
     </div>
     <button class="btn" style="width:100%" id="loginBtn">เข้าสู่ระบบ</button>
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
-    <div class="sub" style="margin-top:16px">ใช้สิทธิ์เดียวกับชีต Members — ต้องมีรหัสแอป TREE ในคอลัมน์ Apps</div>
+    <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
   </form>
 </div>
 
@@ -124,6 +128,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     <div class="t">งานตัดต้นไม้ กฟส.อ่าวลึก</div>
     <div style="flex:1"></div>
     <div class="chipyear" id="yearSwitch"></div>
+    <div id="whoami" class="sub" style="color:#E7DDF0"></div>
     <button class="btn ghost" style="height:36px;padding:0 12px" onclick="logout()">ออก</button>
   </div>
 
@@ -178,7 +183,7 @@ function toast(msg, ms=2400){
 }
 
 async function api(action, payload={}){
-  const body = Object.assign({action, email:S.user?S.user.email:'', token:S.token}, payload);
+  const body = Object.assign({action, user:S.user?S.user.name:'', token:S.token}, payload);
   const res = await fetch(API_URL, {
     method:'POST', redirect:'follow',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -192,13 +197,14 @@ async function api(action, payload={}){
 /* ============ เข้าสู่ระบบ ============ */
 async function doLogin(ev){
   ev.preventDefault();
-  const email = $('#email').value.trim();
+  const user = $('#uname').value.trim();
+  const password = $('#upass').value;
   $('#loginBtn').disabled = true; $('#loginMsg').textContent='';
   try{
     const res = await fetch(API_URL, {
       method:'POST', redirect:'follow',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'login', email})
+      body: JSON.stringify({action:'login', user, password})
     });
     const out = await res.json();
     if(!out.ok) throw new Error(out.error);
@@ -221,6 +227,7 @@ function logout(){
 async function startApp(){
   $('#login').classList.add('hide');
   $('#app').classList.remove('hide');
+  if(S.user) $('#whoami').textContent = S.user.name || '';
   await loadYear(S.year);
 }
 
@@ -752,7 +759,7 @@ async function saveFinding(jobId){
     if(file) photoBase64 = await shrinkImage(file);
     const out = await api('addFinding', {finding, photoBase64, photoName: finding.DeviceID || jobId});
     S.data.findings.push(Object.assign({FindID: out.findId, PhotoBefore: out.photo,
-      Reporter: S.user.name, ReportDate: new Date().toISOString().slice(0,10), Status:'รอปรับปรุง'}, finding));
+      Reporter: (S.user && S.user.name) || '', ReportDate: new Date().toISOString().slice(0,10), Status:'รอปรับปรุง'}, finding));
     closeSheet(); toast('บันทึกจุดที่พบแล้ว');
   }catch(e){
     queueOffline({action:'addFinding', finding});
