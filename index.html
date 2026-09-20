@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>งานตัดต้นไม้ กฟส.อ่าวลึก</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --ink:#1A1A18; --muted:#5F5C55; --dim:#75716A;
+  --ground:#F6F5F1; --card:#FFFFFF; --line:#E3E0D8; --line2:#EFECE5;
+  --pea:#4A1D62; --pea2:#6D2E8E; --pea-soft:#EFE7F5;
+  --ok:#2F7A55; --ok-soft:#E6F1EA; --warn:#C98A16; --warn-soft:#FBF0D8;
+  --bad:#B4402E; --bad-soft:#F7E7E3; --gray:#9A958C;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'IBM Plex Sans Thai',system-ui,sans-serif;background:var(--ground);color:var(--ink);font-size:14px}
+h1,h2,h3,.kanit{font-family:'Kanit',sans-serif;font-weight:600;margin:0}
+button,input,select,textarea{font-family:inherit;font-size:14px}
+a{color:var(--pea2);text-decoration:none}
+.hide{display:none !important}
+
+/* --- login --- */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.loginbox{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.brandmark{width:44px;height:44px;border-radius:12px;background:var(--pea);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Kanit';font-size:16px}
+
+/* --- shell --- */
+.topbar{background:var(--pea);color:#fff;padding:0 20px;height:58px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:40}
+.topbar .t{font-family:'Kanit';font-weight:500;font-size:17px}
+.chipyear{display:flex;gap:4px;background:#5D2C78;padding:4px;border-radius:10px}
+.chipyear button{border:0;background:transparent;color:#E7DDF0;padding:7px 14px;border-radius:7px;cursor:pointer}
+.chipyear button.on{background:#fff;color:var(--pea);font-weight:600}
+.tabs{background:var(--card);border-bottom:1px solid var(--line);padding:0 20px;display:flex;gap:22px;position:sticky;top:58px;z-index:39;overflow-x:auto}
+.tabs button{border:0;background:transparent;padding:14px 0;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--pea);font-weight:600;border-bottom-color:var(--pea)}
+main{padding:20px}
+.grid{display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.kpi .n{font-family:'Kanit';font-size:30px;font-weight:600;line-height:1.2}
+.lbl{font-size:12px;color:var(--dim)}
+.sub{font-size:12px;color:var(--muted)}
+.bar{height:10px;border-radius:5px;background:#EDEAE3;display:flex;gap:2px;overflow:hidden}
+.bar>i{display:block;border-radius:5px}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:#245F42}
+.p-warn{background:var(--warn-soft);color:#7A5A10}
+.p-bad{background:var(--bad-soft);color:#8A2E20}
+.p-gray{background:#EEECE6;color:var(--muted)}
+.p-mv{background:var(--pea-soft);color:var(--pea)}
+.p-hv{background:#F3E7EF;color:#7A2A5E}
+.p-lv{background:#E9F0F6;color:#2A506E}
+table{border-collapse:collapse;width:100%}
+th{font-size:12px;color:var(--muted);text-align:left;padding:10px;border-bottom:1px solid var(--line);background:#FBFAF7;position:sticky;top:0}
+td{font-size:13px;padding:10px;border-bottom:1px solid var(--line2);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.click:hover{background:#FBF8FD;cursor:pointer}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.inp,select.inp{height:44px;padding:0 12px;border:1px solid #DDD9CF;border-radius:10px;background:#fff}
+.btn{height:44px;padding:0 18px;border:0;border-radius:10px;background:var(--pea);color:#fff;font-weight:600;cursor:pointer}
+.btn.ghost{background:#fff;border:1px solid #DDD9CF;color:var(--ink);font-weight:400}
+.btn.ok{background:var(--ok)}
+.btn:disabled{opacity:.55;cursor:default}
+#v-map{position:relative}
+#map{height:calc(100vh - 116px);min-height:420px}
+.maplegend{background:rgba(255,255,255,.95);padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12px;line-height:1.9}
+.maplegend i{display:inline-block;width:20px;height:5px;border-radius:3px;vertical-align:middle;margin-right:7px}
+/* --- modal --- */
+.mask{position:fixed;inset:0;background:rgba(26,26,24,.45);display:flex;justify-content:flex-end;z-index:60}
+.sheet{width:min(720px,100%);background:var(--ground);height:100%;overflow:auto}
+.sheethead{background:var(--pea);color:#fff;padding:16px 20px;display:flex;gap:12px;align-items:flex-start;position:sticky;top:0;z-index:2}
+.sheethead button{border:0;background:transparent;color:#fff;font-size:22px;cursor:pointer;line-height:1}
+.fieldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.field label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
+.field .inp{width:100%}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2F2A34;color:#fff;padding:12px 20px;border-radius:12px;z-index:90;font-size:13px}
+.bottomnav{display:none}
+@media (max-width:760px){
+  main{padding:14px 14px 90px}
+  .topbar{padding:0 14px}
+  .tabs{display:none}
+  .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:50}
+  .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
+  .bottomnav button.on{color:var(--pea);font-weight:600}
+  .bottomnav svg{display:block;margin:0 auto 3px}
+  #v-map{position:relative}
+#map{height:calc(100vh - 150px)}
+  table.resp thead{display:none}
+  table.resp tr{display:block;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:10px;padding:10px}
+  table.resp td{display:flex;justify-content:space-between;gap:10px;border:0;padding:4px 2px}
+  table.resp td::before{content:attr(data-l);color:var(--dim);font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- ======= เข้าสู่ระบบ ======= -->
+<div id="login">
+  <form class="loginbox" onsubmit="doLogin(event)">
+    <div class="brand">
+      <div class="brandmark">อล</div>
+      <div>
+        <div class="kanit" style="font-size:18px">งานตัดต้นไม้</div>
+        <div class="sub">กฟส.อ่าวลึก · ศูนย์รวมงาน</div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label for="email">อีเมลผู้ใช้งาน</label>
+      <input class="inp" id="email" type="email" style="width:100%" placeholder="name@pea.co.th" required>
+    </div>
+    <button class="btn" style="width:100%" id="loginBtn">เข้าสู่ระบบ</button>
+    <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
+    <div class="sub" style="margin-top:16px">ใช้สิทธิ์เดียวกับชีต Members — ต้องมีรหัสแอป TREE ในคอลัมน์ Apps</div>
+  </form>
+</div>
+
+<!-- ======= ตัวแอป ======= -->
+<div id="app" class="hide">
+  <div class="topbar">
+    <div class="brandmark" style="width:34px;height:34px;border-radius:9px;background:#C9A227;color:#3A1550;font-size:13px">อล</div>
+    <div class="t">งานตัดต้นไม้ กฟส.อ่าวลึก</div>
+    <div style="flex:1"></div>
+    <div class="chipyear" id="yearSwitch"></div>
+    <button class="btn ghost" style="height:36px;padding:0 12px" onclick="logout()">ออก</button>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button data-v="dash" class="on">แดชบอร์ด</button>
+    <button data-v="map">แผนที่</button>
+    <button data-v="jobs">ใบงาน</button>
+    <button data-v="pay">งวดเงิน</button>
+  </div>
+
+  <main>
+    <div id="v-dash"></div>
+    <div id="v-map" class="hide"><div id="map"></div></div>
+    <div id="v-jobs" class="hide"></div>
+    <div id="v-pay" class="hide"></div>
+  </main>
+
+  <div class="bottomnav" id="bnav">
+    <button data-v="dash" class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/></svg>สรุป</button>
+    <button data-v="map"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2Z"/><path d="M9 5v12"/><path d="M15 7v12"/></svg>แผนที่</button>
+    <button data-v="jobs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>ใบงาน</button>
+    <button data-v="pay"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>งวดเงิน</button>
+  </div>
+</div>
+
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============================================================
+   ตั้งค่า — วาง URL ของ Web App ที่ Deploy จาก Apps Script
+   ============================================================ */
+const API_URL = 'วาง URL ของ Web App ตรงนี้';
+
+/* ============ สถานะในหน่วยความจำ ============ */
+const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null };
+const LS = 'treeala';
+
+/* ============ เครื่องมือ ============ */
+const $ = s => document.querySelector(s);
+const el = (h) => { const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstElementChild; };
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = v => { const n=parseFloat(String(v).replace(/,/g,'')); return isFinite(n)?n:0; };
+const fmt = (v,d=2) => num(v).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt0 = v => num(v).toLocaleString('th-TH',{maximumFractionDigits:0});
+
+function toast(msg, ms=2400){
+  const t = el(`<div class="toast">${esc(msg)}</div>`);
+  $('#toast').appendChild(t);
+  setTimeout(()=>t.remove(), ms);
+}
+
+async function api(action, payload={}){
+  const body = Object.assign({action, email:S.user?S.user.email:'', token:S.token}, payload);
+  const res = await fetch(API_URL, {
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(body)
+  });
+  const out = await res.json();
+  if(!out.ok) throw new Error(out.error || 'เกิดข้อผิดพลาด');
+  return out;
+}
+
+/* ============ เข้าสู่ระบบ ============ */
+async function doLogin(ev){
+  ev.preventDefault();
+  const email = $('#email').value.trim();
+  $('#loginBtn').disabled = true; $('#loginMsg').textContent='';
+  try{
+    const res = await fetch(API_URL, {
+      method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'login', email})
+    });
+    const out = await res.json();
+    if(!out.ok) throw new Error(out.error);
+    S.user = out.user; S.token = out.token;
+    localStorage.setItem(LS+'_auth', JSON.stringify({user:S.user, token:S.token}));
+    await startApp();
+  }catch(e){
+    $('#loginMsg').textContent = e.message;
+  }finally{
+    $('#loginBtn').disabled = false;
+  }
+}
+
+function logout(){
+  localStorage.removeItem(LS+'_auth');
+  location.reload();
+}
+
+/* ============ เริ่มต้นแอป ============ */
+async function startApp(){
+  $('#login').classList.add('hide');
+  $('#app').classList.remove('hide');
+  await loadYear(S.year);
+}
+
+async function loadYear(year){
+  S.year = year;
+  const cacheKey = LS+'_data_'+year;
+  try{
+    const out = await api('bootstrap', {year});
+    S.data = out;
+    localStorage.setItem(cacheKey, JSON.stringify(out));
+  }catch(e){
+    const c = localStorage.getItem(cacheKey);
+    if(c){ S.data = JSON.parse(c); toast('ออฟไลน์ — แสดงข้อมูลที่บันทึกไว้'); }
+    else { toast(e.message); return; }
+  }
+  renderYearSwitch();
+  render();
+}
+
+function renderYearSwitch(){
+  const years = (S.data.years && S.data.years.length) ? S.data.years : ['2569','2570'];
+  $('#yearSwitch').innerHTML = years.map(y =>
+    `<button class="${y===S.year?'on':''}" onclick="loadYear('${y}')">ปี ${y}</button>`).join('');
+}
+
+/* ============ การคำนวณสรุป ============ */
+function summarize(){
+  const d = S.data;
+  const jobs = d.jobs;
+  const annual = jobs.filter(j => j.JobType === 'รายปี');
+  const lv = jobs.filter(j => j.System === 'LV');
+  const byJob = {};
+  d.rounds.forEach(r => { (byJob[r.JobID] = byJob[r.JobID] || []).push(r); });
+
+  const roundStat = [1,2,3].map(no => {
+    let done=0, wait=0, none=0;
+    annual.forEach(j => {
+      const r = (byJob[j.JobID]||[]).find(x => num(x.RoundNo) === no);
+      const st = r ? String(r.Status) : '';
+      if(st.indexOf('ตรวจรับแล้ว')>=0) done++;
+      else if(st.indexOf('รอตรวจรับ')>=0 || st.indexOf('จ่ายงาน')>=0) wait++;
+      else none++;
+    });
+    return {no, done, wait, none, total:annual.length};
+  });
+
+  const byFeeder = {};
+  jobs.forEach(j => {
+    const f = j.FeederID || 'ไม่ระบุ';
+    byFeeder[f] = byFeeder[f] || {km:0, n:0};
+    byFeeder[f].km += num(j.PlanKm);
+    byFeeder[f].n++;
+  });
+
+  const byGroup = {};
+  annual.forEach(j => {
+    const g = j.MonthGroup || '-';
+    byGroup[g] = byGroup[g] || {n:0, months:j.PlanMonths || ''};
+    byGroup[g].n++;
+  });
+
+  return {
+    jobs, annual, lv, byJob, roundStat, byFeeder, byGroup,
+    totalKm: jobs.reduce((s,j)=>s+num(j.PlanKm),0),
+    kmAnnual: annual.reduce((s,j)=>s+num(j.PlanKm),0),
+    kmLv: lv.reduce((s,j)=>s+num(j.PlanKm),0),
+    est: annual.reduce((s,j)=>s+num(j.EstPrice),0),
+    estVat: annual.reduce((s,j)=>s+num(j.EstPriceVat),0),
+    contract: jobs.reduce((s,j)=>s+num(j.ContractPrice),0)
+  };
+}
+
+function jobRoundState(jobId, sum){
+  const rs = (sum.byJob[jobId]||[]).slice().sort((a,b)=>num(a.RoundNo)-num(b.RoundNo));
+  return rs;
+}
+
+function statusPill(st){
+  const s = String(st||'');
+  if(s.indexOf('ตรวจรับแล้ว')>=0) return '<span class="pill p-ok">ตรวจรับแล้ว</span>';
+  if(s.indexOf('รอตรวจรับ')>=0 || s.indexOf('จ่ายงาน')>=0) return '<span class="pill p-warn">รอตรวจรับ</span>';
+  if(s.indexOf('เกิน')>=0) return '<span class="pill p-bad">เกินกำหนด</span>';
+  return '<span class="pill p-gray">ยังไม่จ่ายงาน</span>';
+}
+function sysPill(sys){
+  if(sys==='HV') return '<span class="pill p-hv">HV</span>';
+  if(sys==='LV') return '<span class="pill p-lv">LV</span>';
+  return '<span class="pill p-mv">MV</span>';
+}
+
+/* ============ แสดงผลตามแท็บ ============ */
+function render(){
+  document.querySelectorAll('#tabs button, #bnav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === S.view));
+  ['dash','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
+  if(S.view==='dash') renderDash();
+  if(S.view==='jobs') renderJobs();
+  if(S.view==='pay')  renderPay();
+  if(S.view==='map')  renderMap();
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('#tabs button, #bnav button');
+  if(b){ S.view = b.dataset.v; render(); }
+});
+
+/* ---------- แดชบอร์ด ---------- */
+function renderDash(){
+  const s = summarize();
+  const maxKm = Math.max(1, ...Object.values(s.byFeeder).map(x=>x.km));
+  const feeders = Object.entries(s.byFeeder).sort((a,b)=>b[1].km-a[1].km);
+  const r3 = s.roundStat[2];
+
+  $('#v-dash').innerHTML = `
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:16px">
+    <div class="card kpi"><div class="lbl">ใบงานทั้งปี ${esc(S.year)}</div><div class="n">${s.jobs.length}</div>
+      <div class="sub">รายปี ${s.annual.length} · เฉพาะคราว ${s.lv.length}</div></div>
+    <div class="card kpi"><div class="lbl">ระยะทางตามแผน</div><div class="n">${fmt(s.totalKm)} <span style="font-size:15px;color:var(--muted)">กม.</span></div>
+      <div class="sub">แรงสูง ${fmt(s.kmAnnual)} · แรงต่ำ ${fmt(s.kmLv)}</div></div>
+    <div class="card kpi"><div class="lbl">ราคาประมาณการ (รวม VAT)</div><div class="n">${fmt0(s.estVat)}</div>
+      <div class="sub">ก่อน VAT ${fmt(s.est)} บาท</div></div>
+    <div class="card kpi"><div class="lbl">ตรวจรับครบ 3 รอบ</div><div class="n" style="color:var(--ok)">${r3.done}<span style="font-size:17px;color:var(--muted)">/${r3.total}</span></div>
+      <div class="sub">รอตรวจรับอีก ${r3.wait} ใบงาน</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+    <div class="card">
+      <h3 style="font-size:16px">ความคืบหน้าการตรวจรับ</h3>
+      <div class="sub" style="margin:2px 0 14px">งานรายปี ${s.annual.length} ใบงาน · ปีละ 3 รอบ</div>
+      ${s.roundStat.map(r => `
+        <div style="margin-bottom:13px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+            <div style="flex:1;font-size:13px">รอบที่ ${r.no}/${esc(S.year)}</div>
+            <div style="font-size:12px;color:var(--muted)">ผ่าน ${r.done} · รอ ${r.wait} · ยังไม่จ่าย ${r.none}</div>
+          </div>
+          <div class="bar">
+            <i style="width:${r.total?(r.done/r.total*100):0}%;background:var(--ok)"></i>
+            <i style="width:${r.total?(r.wait/r.total*100):0}%;background:var(--warn)"></i>
+          </div>
+        </div>`).join('')}
+      <div style="height:1px;background:var(--line2);margin:16px 0"></div>
+      <h3 style="font-size:15px;margin-bottom:10px">กลุ่มแผนงานเดือนที่จ้าง</h3>
+      ${Object.entries(s.byGroup).sort().map(([g,v]) => `
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;padding:5px 0">
+          <div style="width:22px;height:22px;border-radius:6px;background:var(--pea-soft);color:var(--pea);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">${esc(g)}</div>
+          <div style="flex:1">${esc(v.months||'-')}</div>
+          <div style="color:var(--muted)">${v.n} ใบงาน</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:16px">ระยะทางตามแผนรายฟีดเดอร์</h3>
+      <div class="sub" style="margin:2px 0 14px">หน่วย: กิโลเมตร</div>
+      ${feeders.map(([f,v]) => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="width:74px;font-size:12px;color:var(--muted)">${esc(f)}</div>
+          <div style="flex:1;background:#EDEAE3;border-radius:4px;height:14px">
+            <div style="width:${(v.km/maxKm*100).toFixed(1)}%;height:14px;background:var(--pea);border-radius:0 4px 4px 0"></div>
+          </div>
+          <div style="width:64px;text-align:right;font-size:12px;font-weight:600">${fmt(v.km)}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:16px">สิ่งที่ต้องทำ</h3>
+      <div class="sub" style="margin:2px 0 14px">อ้างอิงสถานะรอบล่าสุดของแต่ละใบงาน</div>
+      ${todoList(s)}
+    </div>
+  </div>`;
+}
+
+function todoList(s){
+  const waiting = s.annual.filter(j => jobRoundState(j.JobID,s).some(r =>
+    String(r.Status).indexOf('รอตรวจรับ')>=0 || String(r.Status).indexOf('จ่ายงาน')>=0));
+  const notStarted = s.annual.filter(j => jobRoundState(j.JobID,s).every(r =>
+    String(r.Status).indexOf('ยังไม่')>=0 || !r.Status));
+  const noZpm = s.jobs.filter(j => j.JobType==='รายปี' && !j.ZPM4No);
+  const items = [
+    ['warn', `รอตรวจรับ ${waiting.length} ใบงาน`, waiting.slice(0,3).map(j=>j.MJMNo).join(', ')],
+    ['gray', `ยังไม่เริ่มงาน ${notStarted.length} ใบงาน`, notStarted.slice(0,3).map(j=>j.MJMNo).join(', ')],
+    ['bad',  `ยังไม่มีเลขใบสั่ง ZPM4 ${noZpm.length} ใบงาน`, noZpm.slice(0,3).map(j=>j.MJMNo).join(', ')]
+  ];
+  return items.map(([k,t,d]) => `
+    <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px">
+      <div style="width:8px;height:8px;border-radius:99px;margin-top:7px;background:var(--${k==='gray'?'gray':k})"></div>
+      <div><div style="font-size:13px;font-weight:600">${esc(t)}</div>
+      <div class="sub">${esc(d||'—')}</div></div>
+    </div>`).join('');
+}
+
+/* ---------- รายการใบงาน ---------- */
+let jobFilter = {q:'', sys:'', feeder:'', group:''};
+
+function renderJobs(){
+  const s = summarize();
+  const feeders = [...new Set(s.jobs.map(j=>j.FeederID).filter(Boolean))].sort();
+  const groups  = [...new Set(s.jobs.map(j=>String(j.MonthGroup)).filter(g=>g && g!=='undefined'))].sort();
+
+  const list = s.jobs.filter(j => {
+    if(jobFilter.sys && j.System !== jobFilter.sys) return false;
+    if(jobFilter.feeder && j.FeederID !== jobFilter.feeder) return false;
+    if(jobFilter.group && String(j.MonthGroup) !== jobFilter.group) return false;
+    if(jobFilter.q){
+      const q = jobFilter.q.toLowerCase();
+      const hay = [j.MJMNo, j.JobName, j.SAPDesc, j.ZPM4No, j.Contractor].join(' ').toLowerCase();
+      if(hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  $('#v-jobs').innerHTML = `
+    <div class="toolbar">
+      <input class="inp" style="flex:1;min-width:220px" placeholder="ค้นหาเลขใบงาน ชื่อไลน์ หรือเลขใบสั่ง…" value="${esc(jobFilter.q)}" oninput="jobFilter.q=this.value;renderJobs()">
+      <select class="inp" onchange="jobFilter.sys=this.value;renderJobs()">
+        <option value="">ทุกระบบ</option>
+        ${['HV','MV','LV'].map(x=>`<option ${jobFilter.sys===x?'selected':''}>${x}</option>`).join('')}
+      </select>
+      <select class="inp" onchange="jobFilter.feeder=this.value;renderJobs()">
+        <option value="">ทุกฟีดเดอร์</option>
+        ${feeders.map(f=>`<option ${jobFilter.feeder===f?'selected':''}>${esc(f)}</option>`).join('')}
+      </select>
+      <select class="inp" onchange="jobFilter.group=this.value;renderJobs()">
+        <option value="">ทุกกลุ่มแผนงาน</option>
+        ${groups.map(g=>`<option ${jobFilter.group===g?'selected':''} value="${esc(g)}">กลุ่มที่ ${esc(g)}</option>`).join('')}
+      </select>
+      <button class="btn ok" onclick="exportCsv()">ส่งออก CSV</button>
+    </div>
+    <div class="sub" style="margin-bottom:10px">แสดง ${list.length} จาก ${s.jobs.length} ใบงาน · รวม ${fmt(list.reduce((a,j)=>a+num(j.PlanKm),0))} กม.</div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table class="resp">
+        <thead><tr>
+          <th>เลขใบงาน</th><th>ชื่องาน</th><th>ระบบ</th><th>ฟีดเดอร์</th>
+          <th class="n">กม.</th><th class="n">ประมาณการ</th><th>ใบสั่ง ZPM4</th>
+          <th>รอบ 1</th><th>รอบ 2</th><th>รอบ 3</th>
+        </tr></thead>
+        <tbody>
+        ${list.map(j => {
+          const rs = jobRoundState(j.JobID, s);
+          const cell = no => {
+            const r = rs.find(x=>num(x.RoundNo)===no);
+            if(!r) return '<span class="sub">—</span>';
+            return statusPill(r.Status) + (r.AcceptDate?`<div class="sub">${esc(r.AcceptDate)}</div>`:'');
+          };
+          return `<tr class="click" onclick="openJob('${esc(j.JobID)}')">
+            <td data-l="เลขใบงาน" style="font-weight:600">${esc(j.MJMNo)}</td>
+            <td data-l="ชื่องาน">${esc(j.JobName)}</td>
+            <td data-l="ระบบ">${sysPill(j.System)}</td>
+            <td data-l="ฟีดเดอร์">${esc(j.FeederID)}</td>
+            <td data-l="กม." class="n">${j.PlanKm!==''?fmt(j.PlanKm):'—'}</td>
+            <td data-l="ประมาณการ" class="n">${j.EstPrice!==''?fmt(j.EstPrice):'—'}</td>
+            <td data-l="ใบสั่ง ZPM4">${esc(j.ZPM4No)||'—'}</td>
+            <td data-l="รอบ 1">${cell(1)}</td>
+            <td data-l="รอบ 2">${cell(2)}</td>
+            <td data-l="รอบ 3">${cell(3)}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function exportCsv(){
+  const s = summarize();
+  const cols = ['MJMNo','JobName','System','FeederID','PlanKm','MonthGroup','EstPrice','EstPriceVat','ContractPrice','Contractor','ZPM4No','Status'];
+  const head = ['เลขใบงาน','ชื่องาน','ระบบ','ฟีดเดอร์','ระยะทาง','กลุ่ม','ประมาณการ','รวม VAT','ราคาจ้าง','ผู้รับจ้าง','ใบสั่ง ZPM4','สถานะ'];
+  const lines = [head.join(',')].concat(s.jobs.map(j =>
+    cols.map(c => `"${String(j[c]==null?'':j[c]).replace(/"/g,'""')}"`).join(',')));
+  const blob = new Blob(['﻿'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `งานตัดต้นไม้_${S.year}.csv`;
+  a.click();
+}
+
+/* ---------- งวดเงิน ---------- */
+function renderPay(){
+  const s = summarize();
+  const jmap = {}; s.jobs.forEach(j => jmap[j.JobID] = j);
+  const rows = S.data.payments.slice().sort((a,b) =>
+    String(a.JobID).localeCompare(String(b.JobID)) || num(a.Installment)-num(b.Installment));
+  const paid = rows.filter(r => String(r.Status).indexOf('เบิกจ่ายแล้ว')>=0)
+                   .reduce((a,r)=>a+num(r.Amount),0);
+  const total = rows.reduce((a,r)=>a+num(r.Amount),0);
+
+  $('#v-pay').innerHTML = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:16px">
+      <div class="card kpi"><div class="lbl">มูลค่าสัญญารวม</div><div class="n">${fmt0(s.contract)}</div><div class="sub">บาท</div></div>
+      <div class="card kpi"><div class="lbl">เบิกจ่ายแล้ว</div><div class="n" style="color:var(--ok)">${fmt0(paid)}</div>
+        <div class="sub">${total?((paid/total)*100).toFixed(0):0}% ของงวดทั้งหมด</div></div>
+      <div class="card kpi"><div class="lbl">คงเหลือ</div><div class="n" style="color:var(--warn)">${fmt0(total-paid)}</div><div class="sub">บาท</div></div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table class="resp">
+        <thead><tr><th>เลขใบงาน</th><th>ชื่องาน</th><th>ผู้รับจ้าง</th><th>งวด</th>
+          <th class="n">%</th><th class="n">จำนวนเงิน</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody>
+        ${rows.map(p => {
+          const j = jmap[p.JobID] || {};
+          return `<tr>
+            <td data-l="เลขใบงาน" style="font-weight:600">${esc(j.MJMNo||'')}</td>
+            <td data-l="ชื่องาน">${esc(j.JobName||'')}</td>
+            <td data-l="ผู้รับจ้าง">${esc(j.Contractor||'')}</td>
+            <td data-l="งวด">งวดที่ ${esc(p.Installment)}</td>
+            <td data-l="%" class="n">${esc(p.Percent)}</td>
+            <td data-l="จำนวนเงิน" class="n">${fmt0(p.Amount)}</td>
+            <td data-l="สถานะ">${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0
+              ? '<span class="pill p-ok">เบิกจ่ายแล้ว</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>'}</td>
+            <td><button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}')">สลับสถานะ</button></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function togglePay(payId){
+  const p = S.data.payments.find(x => x.PayID === payId);
+  if(!p) return;
+  const next = String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0 ? 'รอตั้งเบิก' : 'เบิกจ่ายแล้ว';
+  try{
+    await api('savePayment', {payId, fields:{Status:next}});
+    p.Status = next; renderPay(); toast('บันทึกแล้ว');
+  }catch(e){ toast(e.message); }
+}
+
+/* ---------- รายละเอียดใบงาน ---------- */
+function openJob(jobId){
+  const s = summarize();
+  const j = s.jobs.find(x => x.JobID === jobId);
+  if(!j) return;
+  const rs = jobRoundState(jobId, s);
+  const est = S.data.estimates.filter(e => e.JobID === jobId);
+  const pays = S.data.payments.filter(p => p.JobID === jobId);
+  const finds = S.data.findings.filter(f => f.JobID === jobId);
+
+  const estTotal = est.reduce((a,e)=>({km:a.km+num(e.Km), t:a.t+num(e.TreeCount), p:a.p+num(e.Price)}), {km:0,t:0,p:0});
+
+  const html = `
+  <div class="mask" onclick="if(event.target===this)closeSheet()">
+   <div class="sheet">
+    <div class="sheethead">
+      <div style="flex:1">
+        <div style="font-size:12px;color:#D6C6E4">${esc(j.SAPDesc||'')}</div>
+        <div class="kanit" style="font-size:19px;color:#fff">${esc(j.MJMNo)} · ${esc(j.FeederID)}</div>
+      </div>
+      <button onclick="closeSheet()" aria-label="ปิด">×</button>
+    </div>
+    <div style="padding:16px">
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;gap:6px;margin-bottom:8px">${sysPill(j.System)}
+          <span class="pill p-gray">${esc(j.JobType||'')}</span>
+          ${j.MonthGroup?`<span class="pill p-gray">กลุ่มที่ ${esc(j.MonthGroup)}</span>`:''}</div>
+        <div style="font-size:15px;font-weight:600;line-height:1.5">${esc(j.JobName)}</div>
+        <div class="fieldrow" style="margin-top:14px">
+          <div><div class="lbl">ระยะทางตามแผน</div><div style="font-weight:600">${j.PlanKm!==''?fmt(j.PlanKm)+' กม.':'—'}</div></div>
+          <div><div class="lbl">ราคาประมาณการ</div><div style="font-weight:600">${j.EstPrice!==''?fmt(j.EstPrice):'—'}</div></div>
+          <div><div class="lbl">รวม VAT 7%</div><div style="font-weight:600">${j.EstPriceVat!==''?fmt(j.EstPriceVat):'—'}</div></div>
+          <div><div class="lbl">ราคาจ้างจริง</div><div style="font-weight:600">${j.ContractPrice!==''?fmt0(j.ContractPrice):'—'}</div></div>
+          <div><div class="lbl">ผู้รับจ้าง</div><div style="font-weight:600">${esc(j.Contractor)||'—'}</div></div>
+          <div><div class="lbl">ใบสั่ง ZPM4</div><div style="font-weight:600">${esc(j.ZPM4No)||'—'}</div></div>
+          <div><div class="lbl">เดือนตามแผน</div><div style="font-weight:600">${esc(j.PlanMonths)||'—'}</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h3 style="font-size:16px;margin-bottom:12px">รอบการตัดและการตรวจรับ</h3>
+        ${rs.map(r => `
+          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <div style="font-weight:600">รอบที่ ${esc(r.RoundNo)}</div>
+              <div style="flex:1"></div>${statusPill(r.Status)}
+            </div>
+            <div class="fieldrow">
+              <div class="field"><label>วันจ่ายงาน</label><input class="inp" type="date" value="${esc(r.AssignDate)}" id="as-${esc(r.RoundID)}"></div>
+              <div class="field"><label>วันตรวจรับ</label><input class="inp" type="date" value="${esc(r.AcceptDate)}" id="ac-${esc(r.RoundID)}"></div>
+              <div class="field"><label>ลง Time ใน SAP</label><input class="inp" type="date" value="${esc(r.SAPTimeDate)}" id="sp-${esc(r.RoundID)}"></div>
+              <div class="field"><label>สถานะ</label>
+                <select class="inp" id="st-${esc(r.RoundID)}">
+                  ${['ยังไม่จ่ายงาน','จ่ายงาน/รอตรวจรับ','ตรวจรับแล้ว','เกินกำหนดแผน'].map(o =>
+                    `<option ${String(r.Status)===o?'selected':''}>${o}</option>`).join('')}
+                </select></div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px">
+              <button class="btn ok" style="height:38px" onclick="saveRound('${esc(r.RoundID)}')">บันทึกรอบนี้</button>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      ${est.length ? `
+      <div class="card" style="margin-bottom:14px">
+        <h3 style="font-size:16px;margin-bottom:10px">ประมาณการปริมาณงานตามความหนาแน่น</h3>
+        <table><thead><tr><th>ระดับ</th><th class="n">กม.</th><th class="n">ต้น</th><th class="n">ราคา</th></tr></thead>
+        <tbody>${est.map(e=>`<tr><td>${esc(e.DensityClass)}</td><td class="n">${fmt(e.Km)}</td>
+          <td class="n">${fmt0(e.TreeCount)}</td><td class="n">${fmt(e.Price)}</td></tr>`).join('')}
+          <tr style="background:#FBFAF7"><td style="font-weight:600">รวม</td><td class="n" style="font-weight:600">${fmt(estTotal.km)}</td>
+          <td class="n" style="font-weight:600">${fmt0(estTotal.t)}</td><td class="n" style="font-weight:600">${fmt(estTotal.p)}</td></tr>
+        </tbody></table>
+      </div>` : ''}
+
+      ${pays.length ? `
+      <div class="card" style="margin-bottom:14px">
+        <h3 style="font-size:16px;margin-bottom:10px">งวดเงิน</h3>
+        ${pays.map(p=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+          <div style="width:34px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+            background:${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0?'var(--ok-soft)':'var(--warn-soft)'};
+            color:${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0?'#245F42':'#7A5A10'}">${esc(p.Percent)}%</div>
+          <div style="flex:1;font-size:13px">งวดที่ ${esc(p.Installment)} · ${esc(p.Status)}</div>
+          <div style="font-weight:600">${fmt0(p.Amount)}</div></div>`).join('')}
+      </div>` : ''}
+
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <h3 style="font-size:16px;flex:1">จุดที่พบหน้างาน (${finds.length})</h3>
+          <button class="btn ok" style="height:38px" onclick="openFinding('${esc(j.JobID)}')">เพิ่มจุดที่พบ</button>
+        </div>
+        ${finds.length ? finds.map(f=>`
+          <div style="display:flex;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px">
+            ${f.PhotoBefore?`<img src="${esc(f.PhotoBefore)}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px">`:''}
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600">${esc(f.DeviceID||'หมุดอิสระ')} · ${esc(f.TreeType)}</div>
+              <div class="sub">${esc(f.Severity)} · ${esc(f.Status)} · แจ้ง ${esc(f.ReportDate)}</div>
+            </div></div>`).join('') : '<div class="sub">ยังไม่มีการบันทึกจุดที่พบ</div>'}
+      </div>
+    </div>
+   </div>
+  </div>`;
+  $('#modal').innerHTML = html;
+}
+
+function closeSheet(){ $('#modal').innerHTML=''; }
+
+async function saveRound(roundId){
+  const fields = {
+    AssignDate:  $('#as-'+roundId).value,
+    AcceptDate:  $('#ac-'+roundId).value,
+    SAPTimeDate: $('#sp-'+roundId).value,
+    Status:      $('#st-'+roundId).value
+  };
+  try{
+    await api('saveRound', {roundId, fields});
+    const r = S.data.rounds.find(x => x.RoundID === roundId);
+    if(r) Object.assign(r, fields);
+    toast('บันทึกแล้ว');
+    if(S.view==='dash') renderDash();
+    if(S.view==='jobs') renderJobs();
+  }catch(e){ toast(e.message); }
+}
+
+/* ---------- บันทึกจุดที่พบ ---------- */
+function openFinding(jobId){
+  const s = summarize();
+  const j = s.jobs.find(x=>x.JobID===jobId);
+  const rs = jobRoundState(jobId, s);
+  $('#modal').innerHTML = `
+  <div class="mask" onclick="if(event.target===this)closeSheet()">
+   <div class="sheet" style="width:min(520px,100%)">
+     <div class="sheethead">
+       <div style="flex:1"><div style="font-size:12px;color:#D6C6E4">${esc(j.MJMNo)} · ${esc(j.FeederID)}</div>
+       <div class="kanit" style="font-size:18px;color:#fff">บันทึกจุดที่พบ</div></div>
+       <button onclick="closeSheet()" aria-label="ปิด">×</button>
+     </div>
+     <div style="padding:16px">
+       <div class="card">
+         <div class="field" style="margin-bottom:12px">
+           <label for="f-photo">รูปก่อนปรับปรุง</label>
+           <input class="inp" id="f-photo" type="file" accept="image/*" capture="environment" style="width:100%;padding:8px">
+         </div>
+         <div class="field" style="margin-bottom:12px">
+           <label>พิกัด</label>
+           <div style="display:flex;gap:8px">
+             <input class="inp" id="f-lat" placeholder="ละติจูด" style="flex:1">
+             <input class="inp" id="f-lng" placeholder="ลองจิจูด" style="flex:1">
+             <button class="btn ghost" type="button" onclick="grabGps()">จับพิกัด</button>
+           </div>
+         </div>
+         <div class="field" style="margin-bottom:12px">
+           <label for="f-dev">ผูกกับเสา / อุปกรณ์ในผัง</label>
+           <input class="inp" id="f-dev" style="width:100%" placeholder="เช่น ALA06WS-101/24">
+         </div>
+         <div class="field" style="margin-bottom:12px">
+           <label for="f-round">รอบที่</label>
+           <select class="inp" id="f-round" style="width:100%">
+             ${rs.map(r=>`<option value="${esc(r.RoundID)}">รอบที่ ${esc(r.RoundNo)}</option>`).join('')}
+           </select>
+         </div>
+         <div class="field" style="margin-bottom:12px">
+           <label for="f-type">ลักษณะที่พบ</label>
+           <select class="inp" id="f-type" style="width:100%">
+             <option>ต้นไม้พาดสาย</option><option>กิ่งใกล้แนวสาย</option>
+             <option>ต้นเสี่ยงล้มทับแนวสาย</option><option>ต้นไม้นอกเขตเดินสาย ต้องขออนุญาตเจ้าของ</option>
+           </select>
+         </div>
+         <div class="field" style="margin-bottom:12px">
+           <label for="f-sev">ความเร่งด่วน</label>
+           <select class="inp" id="f-sev" style="width:100%">
+             <option>ปกติ</option><option selected>เฝ้าระวัง</option><option>ด่วน</option>
+           </select>
+         </div>
+         <div class="field" style="margin-bottom:14px">
+           <label for="f-note">บันทึกเพิ่มเติม</label>
+           <textarea class="inp" id="f-note" rows="3" style="width:100%;height:auto;padding:10px"></textarea>
+         </div>
+         <button class="btn ok" style="width:100%" id="f-save" onclick="saveFinding('${esc(jobId)}')">บันทึกจุดที่พบ</button>
+       </div>
+     </div>
+   </div>
+  </div>`;
+}
+
+function grabGps(){
+  if(!navigator.geolocation) return toast('อุปกรณ์นี้ไม่รองรับการจับพิกัด');
+  navigator.geolocation.getCurrentPosition(p => {
+    $('#f-lat').value = p.coords.latitude.toFixed(6);
+    $('#f-lng').value = p.coords.longitude.toFixed(6);
+    toast('จับพิกัดแล้ว ±' + Math.round(p.coords.accuracy) + ' ม.');
+  }, () => toast('จับพิกัดไม่สำเร็จ'), {enableHighAccuracy:true, timeout:10000});
+}
+
+async function saveFinding(jobId){
+  const btn = $('#f-save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  const file = $('#f-photo').files[0];
+  const finding = {
+    JobID: jobId, RoundID: $('#f-round').value, DeviceID: $('#f-dev').value,
+    Lat: $('#f-lat').value, Lng: $('#f-lng').value,
+    TreeType: $('#f-type').value, Severity: $('#f-sev').value, Note: $('#f-note').value
+  };
+  try{
+    let photoBase64 = '';
+    if(file) photoBase64 = await shrinkImage(file);
+    const out = await api('addFinding', {finding, photoBase64, photoName: finding.DeviceID || jobId});
+    S.data.findings.push(Object.assign({FindID: out.findId, PhotoBefore: out.photo,
+      Reporter: S.user.name, ReportDate: new Date().toISOString().slice(0,10), Status:'รอปรับปรุง'}, finding));
+    closeSheet(); toast('บันทึกจุดที่พบแล้ว');
+  }catch(e){
+    queueOffline({action:'addFinding', finding});
+    closeSheet(); toast('ออฟไลน์ — เก็บไว้ส่งเมื่อมีสัญญาณ');
+  }
+}
+
+function shrinkImage(file, max=1280, q=0.72){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, max/Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width*sc); c.height = Math.round(img.height*sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function queueOffline(item){
+  const q = JSON.parse(localStorage.getItem(LS+'_queue') || '[]');
+  q.push(item); localStorage.setItem(LS+'_queue', JSON.stringify(q));
+}
+
+async function flushQueue(){
+  const q = JSON.parse(localStorage.getItem(LS+'_queue') || '[]');
+  if(!q.length || !S.token) return;
+  const left = [];
+  for(const it of q){
+    try{ await api(it.action, it); }catch(e){ left.push(it); }
+  }
+  localStorage.setItem(LS+'_queue', JSON.stringify(left));
+  if(q.length !== left.length) toast('ส่งข้อมูลที่ค้างไว้แล้ว ' + (q.length-left.length) + ' รายการ');
+}
+window.addEventListener('online', flushQueue);
+
+/* ---------- แผนที่ ---------- */
+const FEEDER_BASE = {ALA01:'#4A1D62', ALA02:'#6D2E8E', ALA03:'#2F7A55', ALA05:'#2A506E',
+                     ALA06:'#8A6512', ALA07:'#B4402E', ALA09:'#5D6E2C'};
+
+async function renderMap(){
+  if(!S.map){
+    S.map = L.map('map', {zoomControl:true}).setView([8.383, 98.723], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(S.map);
+    const legend = L.control({position:'bottomleft'});
+    legend.onAdd = () => {
+      const d = L.DomUtil.create('div','maplegend');
+      d.innerHTML = `<div style="font-weight:600;margin-bottom:4px">สถานะรอบล่าสุด</div>
+        <div><i style="background:#2F7A55"></i>ตรวจรับแล้ว</div>
+        <div><i style="background:#C98A16"></i>จ่ายงาน/รอตรวจรับ</div>
+        <div><i style="background:#9A958C"></i>ยังไม่เริ่ม</div>
+        <div><i style="background:#B4402E"></i>เกินกำหนดแผน</div>`;
+      return d;
+    };
+    legend.addTo(S.map);
+  }
+  setTimeout(()=>S.map.invalidateSize(), 60);
+
+  if(S.layers) S.layers.clearLayers();
+  S.layers = L.layerGroup().addTo(S.map);
+
+  if(!S.sld){
+    try{
+      const out = await api('sldPoints');
+      S.sld = out.points || [];
+      if(out.note) toast(out.note, 4200);
+    }catch(e){ S.sld = []; toast(e.message, 4200); }
+  }
+
+  const s = summarize();
+  const statusColor = jobId => {
+    const rs = jobRoundState(jobId, s);
+    const last = rs.filter(r => String(r.Status)).slice(-1)[0];
+    const st = last ? String(last.Status) : '';
+    const anyWait = rs.some(r => String(r.Status).indexOf('รอตรวจรับ')>=0 || String(r.Status).indexOf('จ่ายงาน')>=0);
+    const allDone = rs.length && rs.every(r => String(r.Status).indexOf('ตรวจรับแล้ว')>=0);
+    if(allDone) return '#2F7A55';
+    if(anyWait) return '#C98A16';
+    if(st.indexOf('เกิน')>=0) return '#B4402E';
+    return '#9A958C';
+  };
+
+  // 1) เส้นฟีดเดอร์จากพิกัดอุปกรณ์ในระบบ SLD
+  const byFeeder = {};
+  (S.sld||[]).forEach(p => {
+    const f = (p.feeder||'').toUpperCase();
+    if(!f) return;
+    (byFeeder[f] = byFeeder[f] || []).push(p);
+  });
+
+  const jobsByFeeder = {};
+  s.jobs.forEach(j => { (jobsByFeeder[j.FeederID] = jobsByFeeder[j.FeederID] || []).push(j); });
+
+  let drawn = 0;
+  Object.entries(byFeeder).forEach(([f, pts]) => {
+    const jobs = jobsByFeeder[f] || [];
+    const color = jobs.length ? statusColor(jobs[0].JobID) : '#9A958C';
+    const line = pts.map(p => [p.lat, p.lng]);
+    if(line.length > 1){
+      L.polyline(line, {color, weight:5, opacity:.9})
+        .bindPopup(`<b>${f}</b><br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.`)
+        .addTo(S.layers);
+      drawn++;
+    }
+    pts.forEach(p => L.circleMarker([p.lat,p.lng], {radius:3, color:color, weight:1, fillOpacity:.8})
+      .bindPopup(`${p.id}<br>${f}`).addTo(S.layers));
+  });
+
+  // 2) จุดที่พบหน้างาน
+  S.data.findings.forEach(f => {
+    const lat = num(f.Lat), lng = num(f.Lng);
+    if(!lat || !lng) return;
+    L.circleMarker([lat,lng], {radius:7, color:'#B4402E', weight:3, fillColor:'#fff', fillOpacity:1})
+      .bindPopup(`<b>${esc(f.DeviceID||'หมุดอิสระ')}</b><br>${esc(f.TreeType)}<br>${esc(f.Status)}`)
+      .addTo(S.layers);
+  });
+
+  if(drawn){
+    const all = [];
+    Object.values(byFeeder).forEach(pts => pts.forEach(p => all.push([p.lat,p.lng])));
+    if(all.length) S.map.fitBounds(L.latLngBounds(all).pad(0.08));
+  }else if(!document.getElementById('mapHint')){
+    const hint = el(`<div id="mapHint" class="card" style="position:absolute;right:14px;top:14px;z-index:500;max-width:280px">
+      <div style="font-weight:600;margin-bottom:6px">ยังไม่มีพิกัดจากระบบ SLD</div>
+      <div class="sub">ใส่รหัสชีต SLD ที่ช่อง SLD_SHEET_ID ในแท็บ Config ของ TreeALA_DB แล้วรีเฟรชหน้านี้</div></div>`);
+    $('#v-map').appendChild(hint);
+  }
+}
+
+/* ============ เริ่มทำงาน ============ */
+(function init(){
+  const a = localStorage.getItem(LS+'_auth');
+  if(a){
+    try{
+      const o = JSON.parse(a);
+      S.user = o.user; S.token = o.token;
+      startApp().then(flushQueue);
+    }catch(e){ /* ให้เข้าสู่ระบบใหม่ */ }
+  }
+})();
+</script>
+</body>
+</html>
