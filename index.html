@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>งานตัดต้นไม้ กฟส.อ่าวลึก</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{
   --ink:#1A1A18; --muted:#5F5C55; --dim:#75716A;
@@ -77,8 +76,14 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .btn:disabled{opacity:.55;cursor:default}
 #v-map{position:relative}
 #map{height:calc(100vh - 116px);min-height:420px}
-.maplegend{background:rgba(255,255,255,.95);padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12px;line-height:1.9}
+.maplegend{position:absolute;left:12px;bottom:12px;z-index:20;background:rgba(255,255,255,.96);padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12px;line-height:1.9;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .maplegend i{display:inline-block;width:20px;height:5px;border-radius:3px;vertical-align:middle;margin-right:7px}
+/* --- ชั้นกำลังโหลด --- */
+.busy{position:absolute;inset:0;background:rgba(246,245,241,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:70;text-align:center;padding:24px}
+.busy .msg{font-family:'Kanit',sans-serif;font-size:16px;font-weight:500}
+.tipbox{max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:10px;text-align:left}
+.tipbox .k{font-size:11px;font-weight:600;color:var(--pea);white-space:nowrap}
+.tipbox .v{font-size:12px;color:var(--muted);line-height:1.6}
 /* --- modal --- */
 .mask{position:fixed;inset:0;background:rgba(26,26,24,.45);display:flex;justify-content:flex-end;z-index:60}
 .sheet{width:min(720px,100%);background:var(--ground);height:100%;overflow:auto}
@@ -120,7 +125,8 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     </div>
   </div>
   <div class="spin"></div>
-  <div id="splashMsg" class="sub">กำลังตรวจสอบสิทธิ์…</div>
+  <div id="splashMsg" class="msg" style="font-family:'Kanit',sans-serif;font-size:15px">กำลังรอ…</div>
+  <div class="tipbox"><div class="k">เกร็ดการใช้งาน</div><div class="v" id="splashTip">—</div></div>
 </div>
 
 <!-- ======= เข้าสู่ระบบ ======= -->
@@ -144,6 +150,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     <button class="btn" style="width:100%" id="loginBtn">เข้าสู่ระบบ</button>
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
+    <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
   </form>
 </div>
 
@@ -159,6 +166,9 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     </div>
     <div class="tb-right">
       <div class="chipyear" id="yearSwitch"></div>
+      <a class="iconbtn" href="../" aria-label="กลับไปศูนย์รวมงาน" title="กลับไปศูนย์รวมงาน">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>
+      </a>
       <button class="iconbtn" onclick="logout()" aria-label="ออกจากระบบ" title="ออกจากระบบ">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M12 19H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg>
       </button>
@@ -190,7 +200,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 <div id="modal"></div>
 <div id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://api.longdo.com/map/?key=f61a87ff70c39e610385809783d5a1b3"></script>
 <script>
 /* ============================================================
    ตั้งค่า — วาง URL ของ Web App ที่ Deploy จาก Apps Script
@@ -221,11 +231,59 @@ function toast(msg, ms=2400){
   setTimeout(()=>t.remove(), ms);
 }
 
+const TIPS = [
+  'กดที่แถวใบงานในแท็บใบงาน เพื่อเปิดรายละเอียด รอบตรวจรับ และงวดเงินของใบนั้น',
+  'ในหน้ารายละเอียด แก้วันตรวจรับแล้วกดบันทึกรอบนี้ ข้อมูลจะเข้าชีต TreeALA_DB ทันที',
+  'แท็บแผนที่ระบายสีตามสถานะรอบล่าสุด เขียวคือตรวจรับครบ เหลืองคือรอตรวจรับ เทาคือยังไม่เริ่ม',
+  'ปุ่มส่งออก CSV ในแท็บใบงาน ใช้ทำรายงานส่ง กฟต.2 ได้เลย เปิดด้วย Excel ได้ทันที',
+  'สลับปี 2569 กับ 2570 ได้ที่มุมขวาบน ข้อมูลคนละชุดกัน',
+  'หน้างานไม่มีสัญญาณก็บันทึกจุดที่พบได้ ระบบจะเก็บไว้แล้วส่งให้เองเมื่อเน็ตกลับมา',
+  'ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ SLD เข้าแอปไหนก่อนก็ได้ ไม่ต้องล็อกอินซ้ำ',
+  'กดที่เส้นบนแผนที่ จะบอกว่าเป็นช่วงจากอุปกรณ์ไหนถึงอุปกรณ์ไหน และฟีดเดอร์นั้นมีกี่ใบงาน',
+  'ตัวเลขงวดเงินมาจากสัญญา 40/40/20 กดสลับสถานะได้ในแท็บงวดเงิน',
+  'ไอคอนรูปบ้านมุมขวาบน กดกลับไปหน้าศูนย์รวมงานได้ทุกเมื่อ'
+];
+let tipTimer = null;
+function startTips(el){
+  if(!el) return;
+  let i = Math.floor(Math.random()*TIPS.length);
+  el.textContent = TIPS[i];
+  clearInterval(tipTimer);
+  tipTimer = setInterval(()=>{ i = (i+1) % TIPS.length; el.textContent = TIPS[i]; }, 4000);
+}
+function stopTips(){ clearInterval(tipTimer); tipTimer = null; }
+
+/* ชั้นกำลังรอแบบวางทับกล่องใดก็ได้ */
+function busy(container, msg){
+  if(!container) return;
+  let b = container.querySelector(':scope > .busy');
+  if(!b){
+    b = el(`<div class="busy">
+      <div class="spin"></div>
+      <div class="msg">กำลังรอ…</div>
+      <div class="tipbox"><div class="k">เกร็ดการใช้งาน</div><div class="v"></div></div>
+    </div>`);
+    if(getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    container.appendChild(b);
+  }
+  b.querySelector('.msg').textContent = msg || 'กำลังรอ…';
+  startTips(b.querySelector('.tipbox .v'));
+}
+function busyOff(container){
+  if(!container) return;
+  const b = container.querySelector(':scope > .busy');
+  if(b) b.remove();
+  stopTips();
+}
+
 function splash(msg){
   const el0 = $('#splash');
-  if(el0){ el0.classList.remove('hide'); if(msg) $('#splashMsg').textContent = msg; }
+  if(!el0) return;
+  el0.classList.remove('hide');
+  $('#splashMsg').textContent = msg || 'กำลังรอ…';
+  startTips($('#splashTip'));
 }
-function splashOff(){ const e = $('#splash'); if(e) e.classList.add('hide'); }
+function splashOff(){ const e = $('#splash'); if(e) e.classList.add('hide'); stopTips(); }
 function showLogin(msg){
   splashOff();
   $('#login').classList.remove('hide');
@@ -363,7 +421,15 @@ async function loadYear(year){
 function renderYearSwitch(){
   const years = (S.data.years && S.data.years.length) ? S.data.years : ['2569','2570'];
   $('#yearSwitch').innerHTML = years.map(y =>
-    `<button class="${y===S.year?'on':''}" onclick="loadYear('${y}')">ปี ${y}</button>`).join('');
+    `<button class="${y===S.year?'on':''}" onclick="switchYear('${y}')">ปี ${y}</button>`).join('');
+}
+
+async function switchYear(y){
+  if(y === S.year) return;
+  S.sld = S.sld;                     // พิกัดใช้ร่วมกันทุกปี ไม่ต้องดึงใหม่
+  splash('กำลังโหลดข้อมูลปี ' + y + '…');
+  await loadYear(y);
+  splashOff();
 }
 
 /* ============ การคำนวณสรุป ============ */
@@ -648,7 +714,7 @@ function renderPay(){
             <td data-l="จำนวนเงิน" class="n">${fmt0(p.Amount)}</td>
             <td data-l="สถานะ">${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0
               ? '<span class="pill p-ok">เบิกจ่ายแล้ว</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>'}</td>
-            <td><button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}')">สลับสถานะ</button></td>
+            <td><button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button></td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -656,14 +722,18 @@ function renderPay(){
     </div>`;
 }
 
-async function togglePay(payId){
+async function togglePay(payId, btn){
   const p = S.data.payments.find(x => x.PayID === payId);
   if(!p) return;
   const next = String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0 ? 'รอตั้งเบิก' : 'เบิกจ่ายแล้ว';
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังรอ…'; }
   try{
     await api('savePayment', {payId, fields:{Status:next}});
     p.Status = next; renderPay(); toast('บันทึกแล้ว');
-  }catch(e){ toast(e.message); }
+  }catch(e){
+    toast(e.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'สลับสถานะ'; }
+  }
 }
 
 /* ---------- รายละเอียดใบงาน ---------- */
@@ -724,7 +794,7 @@ function openJob(jobId){
                 </select></div>
             </div>
             <div style="margin-top:10px;display:flex;gap:8px">
-              <button class="btn ok" style="height:38px" onclick="saveRound('${esc(r.RoundID)}')">บันทึกรอบนี้</button>
+              <button class="btn ok" style="height:38px" id="rb-${esc(r.RoundID)}" onclick="saveRound('${esc(r.RoundID)}')">บันทึกรอบนี้</button>
             </div>
           </div>`).join('')}
       </div>
@@ -773,6 +843,8 @@ function openJob(jobId){
 function closeSheet(){ $('#modal').innerHTML=''; }
 
 async function saveRound(roundId){
+  const btn = $('#rb-'+roundId);
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
   const fields = {
     AssignDate:  $('#as-'+roundId).value,
     AcceptDate:  $('#ac-'+roundId).value,
@@ -787,6 +859,7 @@ async function saveRound(roundId){
     if(S.view==='dash') renderDash();
     if(S.view==='jobs') renderJobs();
   }catch(e){ toast(e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = 'บันทึกรอบนี้'; } }
 }
 
 /* ---------- บันทึกจุดที่พบ ---------- */
@@ -912,55 +985,68 @@ async function flushQueue(){
 }
 window.addEventListener('online', flushQueue);
 
-/* ---------- แผนที่ ---------- */
-const FEEDER_BASE = {ALA01:'#4A1D62', ALA02:'#6D2E8E', ALA03:'#2F7A55', ALA05:'#2A506E',
-                     ALA06:'#8A6512', ALA07:'#B4402E', ALA09:'#5D6E2C'};
+/* ---------- แผนที่ (Longdo Map) ---------- */
+function statusColorOf(jobId, sum){
+  const rs = jobRoundState(jobId, sum);
+  const anyWait = rs.some(r => String(r.Status).indexOf('รอตรวจรับ')>=0 || String(r.Status).indexOf('จ่ายงาน')>=0);
+  const allDone = rs.length && rs.every(r => String(r.Status).indexOf('ตรวจรับแล้ว')>=0);
+  const late    = rs.some(r => String(r.Status).indexOf('เกิน')>=0);
+  if(allDone) return '#2F7A55';
+  if(late)    return '#B4402E';
+  if(anyWait) return '#C98A16';
+  return '#9A958C';
+}
+
+function ensureMap(){
+  if(S.map) return S.map;
+  if(typeof longdo === 'undefined' || !longdo.Map) return null;
+  try{
+    S.map = new longdo.Map({
+      placeholder: document.getElementById('map'),
+      language: 'th',
+      zoom: 11,
+      location: { lon: 98.723, lat: 8.383 },
+      lastView: false
+    });
+  }catch(e){ return null; }
+  if(!document.getElementById('mapLegend')){
+    $('#v-map').appendChild(el(`<div id="mapLegend" class="maplegend">
+      <div style="font-weight:600;margin-bottom:4px">สถานะรอบล่าสุด</div>
+      <div><i style="background:#2F7A55"></i>ตรวจรับแล้ว</div>
+      <div><i style="background:#C98A16"></i>จ่ายงาน/รอตรวจรับ</div>
+      <div><i style="background:#9A958C"></i>ยังไม่เริ่ม</div>
+      <div><i style="background:#B4402E"></i>เกินกำหนดแผน</div>
+    </div>`));
+  }
+  return S.map;
+}
 
 async function renderMap(){
-  if(!S.map){
-    S.map = L.map('map', {zoomControl:true}).setView([8.383, 98.723], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap'
-    }).addTo(S.map);
-    const legend = L.control({position:'bottomleft'});
-    legend.onAdd = () => {
-      const d = L.DomUtil.create('div','maplegend');
-      d.innerHTML = `<div style="font-weight:600;margin-bottom:4px">สถานะรอบล่าสุด</div>
-        <div><i style="background:#2F7A55"></i>ตรวจรับแล้ว</div>
-        <div><i style="background:#C98A16"></i>จ่ายงาน/รอตรวจรับ</div>
-        <div><i style="background:#9A958C"></i>ยังไม่เริ่ม</div>
-        <div><i style="background:#B4402E"></i>เกินกำหนดแผน</div>`;
-      return d;
-    };
-    legend.addTo(S.map);
+  const box = $('#v-map');
+  const map = ensureMap();
+  if(!map){
+    busy(box, 'โหลดแผนที่ไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง');
+    return;
   }
-  setTimeout(()=>S.map.invalidateSize(), 60);
-
-  if(S.layers) S.layers.clearLayers();
-  S.layers = L.layerGroup().addTo(S.map);
+  try{ map.resize(); }catch(e){}
 
   if(!S.sld){
+    busy(box, 'กำลังดึงพิกัดอุปกรณ์จากระบบ SLD…');
     try{
       const out = await api('sldPoints');
       S.sld = out.points || [];
+      S.sldFeeders = out.feeders || [];
       if(out.note) toast(out.note, 4200);
-    }catch(e){ S.sld = []; toast(e.message, 4200); }
+    }catch(e){
+      S.sld = [];
+      toast(e.message, 4200);
+    }
+    busyOff(box);
   }
 
-  const s = summarize();
-  const statusColor = jobId => {
-    const rs = jobRoundState(jobId, s);
-    const last = rs.filter(r => String(r.Status)).slice(-1)[0];
-    const st = last ? String(last.Status) : '';
-    const anyWait = rs.some(r => String(r.Status).indexOf('รอตรวจรับ')>=0 || String(r.Status).indexOf('จ่ายงาน')>=0);
-    const allDone = rs.length && rs.every(r => String(r.Status).indexOf('ตรวจรับแล้ว')>=0);
-    if(allDone) return '#2F7A55';
-    if(anyWait) return '#C98A16';
-    if(st.indexOf('เกิน')>=0) return '#B4402E';
-    return '#9A958C';
-  };
+  try{ map.Overlays.clear(); }catch(e){}
 
-  // 1) โครงข่ายจากพิกัดอุปกรณ์ในระบบ SLD — ลากเส้นตาม ParentID
+  const s = summarize();
   const pts = S.sld || [];
   const byId = {};
   pts.forEach(p => { if(p.id) byId[p.id] = p; });
@@ -976,45 +1062,71 @@ async function renderMap(){
     const f = (p.feeder||'').toUpperCase();
     if(!f || feederColor[f]) return;
     const jobs = jobsByFeeder[f] || [];
-    feederColor[f] = jobs.length ? statusColor(jobs[0].JobID) : '#9A958C';
+    feederColor[f] = jobs.length ? statusColorOf(jobs[0].JobID, s) : '#9A958C';
   });
 
   let drawn = 0;
-  const bounds = [];
+  let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
+  const seen = (lon,lat)=>{ minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon);
+                            minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); };
+
   pts.forEach(p => {
     const f = (p.feeder||'').toUpperCase();
     const color = feederColor[f] || '#9A958C';
     const jobs = jobsByFeeder[f] || [];
-    bounds.push([p.lat, p.lng]);
+    seen(p.lng, p.lat);
+
     const par = p.parent && byId[p.parent];
     if(par){
-      L.polyline([[par.lat, par.lng], [p.lat, p.lng]], {color, weight:4, opacity:.85})
-        .bindPopup(`<b>${esc(f)}</b><br>${esc(par.id)} &rarr; ${esc(p.id)}` +
-          (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : ''))
-        .addTo(S.layers);
-      drawn++;
+      try{
+        map.Overlays.add(new longdo.Polyline(
+          [{ lon: par.lng, lat: par.lat }, { lon: p.lng, lat: p.lat }],
+          { title: f || 'ช่วงสาย',
+            detail: `${esc(par.id)} &rarr; ${esc(p.id)}` +
+                    (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : ''),
+            lineWidth: 4, lineColor: color, clickable: true }
+        ));
+        drawn++;
+      }catch(e){}
     }
-    const big = (p.type === 'WS' || p.type === 'WR' || p.type === 'WB');
-    L.circleMarker([p.lat, p.lng], {radius: big?4.5:2.5, color, weight:1, fillColor:color, fillOpacity:.85})
-      .bindPopup(`<b>${esc(p.id)}</b><br>${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}`)
-      .addTo(S.layers);
+
+    if(p.type === 'WS' || p.type === 'WR' || p.type === 'WB'){
+      try{
+        map.Overlays.add(new longdo.Marker({ lon: p.lng, lat: p.lat }, {
+          title: p.id,
+          detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}`,
+          icon: { html: `<div style="width:11px;height:11px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>`,
+                  offset: { x: 5, y: 5 } }
+        }));
+      }catch(e){}
+    }
   });
-  // 2) จุดที่พบหน้างาน
+
   S.data.findings.forEach(f => {
     const lat = num(f.Lat), lng = num(f.Lng);
     if(!lat || !lng) return;
-    L.circleMarker([lat,lng], {radius:7, color:'#B4402E', weight:3, fillColor:'#fff', fillOpacity:1})
-      .bindPopup(`<b>${esc(f.DeviceID||'หมุดอิสระ')}</b><br>${esc(f.TreeType)}<br>${esc(f.Status)}`)
-      .addTo(S.layers);
+    seen(lng, lat);
+    try{
+      map.Overlays.add(new longdo.Marker({ lon: lng, lat: lat }, {
+        title: f.DeviceID || 'จุดที่พบ',
+        detail: `${esc(f.TreeType||'')}<br>${esc(f.Severity||'')} · ${esc(f.Status||'')}`,
+        icon: { html: `<div style="width:14px;height:14px;border-radius:99px;background:#fff;border:3px solid #B4402E"></div>`,
+                offset: { x: 7, y: 7 } }
+      }));
+    }catch(e){}
   });
 
-  if(bounds.length){
-    S.map.fitBounds(L.latLngBounds(bounds).pad(0.08));
-  }else if(!document.getElementById('mapHint')){
-    const hint = el(`<div id="mapHint" class="card" style="position:absolute;right:14px;top:14px;z-index:500;max-width:280px">
+  if(minLon <= maxLon && minLat <= maxLat){
+    try{ map.bound({ minLon, minLat, maxLon, maxLat }); }catch(e){}
+  }
+
+  const hint = document.getElementById('mapHint');
+  if(!drawn && !hint){
+    $('#v-map').appendChild(el(`<div id="mapHint" class="card" style="position:absolute;right:12px;top:12px;z-index:20;max-width:280px">
       <div style="font-weight:600;margin-bottom:6px">ยังไม่มีพิกัดจากระบบ SLD</div>
-      <div class="sub">ใส่รหัสชีต SLD ที่ช่อง SLD_SHEET_ID ในแท็บ Config ของ TreeALA_DB แล้วรีเฟรชหน้านี้</div></div>`);
-    $('#v-map').appendChild(hint);
+      <div class="sub">ตรวจค่า SLD_SHEET_ID ในแท็บ Config ของชีต TreeALA_DB แล้วรีเฟรชหน้านี้</div></div>`));
+  }else if(drawn && hint){
+    hint.remove();
   }
 }
 
