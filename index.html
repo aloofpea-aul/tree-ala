@@ -164,6 +164,12 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
    ============================================================ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbx3pSMOKIPC0ZKUWzx4tJk-m-cmK0ACxxrGhy7kbs2-D24Rs_pnlMp2Lp3CXi-lSrpq/exec';
 
+/* ศูนย์รวมงาน กฟส.อ่าวลึก — ใช้ล็อกอินและตัวนับสถิติร่วมกัน */
+const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6hmhd3lUXCVocAJiK7l28Tzddms9SQ9Z7p-iYgrrgd2B2meWw/exec';
+const HUB_USER = 'pea_aoluek_username';
+const HUB_PASS = 'pea_aoluek_password';
+const APP_CODE = 'tree';
+
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null };
 const LS = 'treeala';
@@ -194,6 +200,55 @@ async function api(action, payload={}){
   return out;
 }
 
+/* ============ เชื่อมกับศูนย์รวมงาน ============ */
+function hubCreds(){
+  try{ return { name: localStorage.getItem(HUB_USER)||'', pass: localStorage.getItem(HUB_PASS)||'' }; }
+  catch(e){ return { name:'', pass:'' }; }
+}
+function saveHubCreds(name, pass){
+  try{ localStorage.setItem(HUB_USER, name); localStorage.setItem(HUB_PASS, pass); }catch(e){}
+}
+
+/* นับการเปิดใช้งานเข้าสถิติของศูนย์รวมงาน
+   ถ้าเข้ามาจากการ์ดในหน้าศูนย์รวม หน้านั้นนับให้แล้ว จะไม่นับซ้ำ */
+async function logAppOpen(){
+  try{
+    if(sessionStorage.getItem('tree_opened')) return;
+    sessionStorage.setItem('tree_opened','1');
+    const ref = document.referrer || '';
+    if(ref){
+      const u = new URL(ref);
+      if(u.origin === location.origin && /^\/(index\.html)?$/.test(u.pathname)) return;
+    }
+    const c = hubCreds();
+    if(!c.name) return;
+    await fetch(HUB_GAS, {
+      method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'appOpen', app:APP_CODE,
+                             changedBy:c.name, changedByPassword:c.pass })
+    });
+  }catch(e){ /* สถิติไม่สำเร็จ ไม่กระทบการใช้งาน */ }
+}
+
+/* เข้าสู่ระบบอัตโนมัติด้วยบัญชีที่ล็อกอินไว้แล้วในศูนย์รวมงาน */
+async function autoLogin(user, password){
+  try{
+    const res = await fetch(API_URL, {
+      method:'POST', redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'login', user, password})
+    });
+    const out = await res.json();
+    if(!out.ok) return false;
+    S.user = out.user; S.token = out.token;
+    localStorage.setItem(LS+'_auth', JSON.stringify({user:S.user, token:S.token}));
+    await startApp();
+    flushQueue(); logAppOpen();
+    return true;
+  }catch(e){ return false; }
+}
+
 /* ============ เข้าสู่ระบบ ============ */
 async function doLogin(ev){
   ev.preventDefault();
@@ -210,7 +265,9 @@ async function doLogin(ev){
     if(!out.ok) throw new Error(out.error);
     S.user = out.user; S.token = out.token;
     localStorage.setItem(LS+'_auth', JSON.stringify({user:S.user, token:S.token}));
+    saveHubCreds(user, password);
     await startApp();
+    logAppOpen();
   }catch(e){
     $('#loginMsg').textContent = e.message;
   }finally{
@@ -220,6 +277,7 @@ async function doLogin(ev){
 
 function logout(){
   localStorage.removeItem(LS+'_auth');
+  try{ sessionStorage.setItem('tree_skipauto','1'); }catch(e){}
   location.reload();
 }
 
@@ -912,9 +970,15 @@ async function renderMap(){
     try{
       const o = JSON.parse(a);
       S.user = o.user; S.token = o.token;
-      startApp().then(flushQueue);
-    }catch(e){ /* ให้เข้าสู่ระบบใหม่ */ }
+      startApp().then(()=>{ flushQueue(); logAppOpen(); });
+      return;
+    }catch(e){ /* ข้อมูลเสีย ให้เข้าสู่ระบบใหม่ */ }
   }
+  const c = hubCreds();
+  if(c.name) $('#uname').value = c.name;
+  let skip = false;
+  try{ skip = !!sessionStorage.getItem('tree_skipauto'); }catch(e){}
+  if(!skip && c.name && c.pass) autoLogin(c.name, c.pass);
 })();
 </script>
 </body>
