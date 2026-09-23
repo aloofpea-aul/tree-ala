@@ -202,6 +202,19 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 
 <script src="https://api.longdo.com/map/?key=f61a87ff70c39e610385809783d5a1b3"></script>
 <script>
+/* ชุดกราฟิกกลางของแพลตฟอร์ม — ลองหาไฟล์จากหลายตำแหน่ง ถ้าไม่เจอแอปยังทำงานปกติ */
+(function(){
+  const paths = ['ui-kit.js', '../ui-kit.js', '../sld-ala/ui-kit.js', '/sld-ala/ui-kit.js'];
+  let i = 0;
+  (function next(){
+    if(i >= paths.length) return;
+    const t = document.createElement('script');
+    t.src = paths[i++]; t.onerror = next;
+    document.head.appendChild(t);
+  })();
+})();
+</script>
+<script>
 /* ============================================================
    ตั้งค่า — วาง URL ของ Web App ที่ Deploy จาก Apps Script
    ============================================================ */
@@ -225,7 +238,11 @@ const num = v => { const n=parseFloat(String(v).replace(/,/g,'')); return isFini
 const fmt = (v,d=2) => num(v).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmt0 = v => num(v).toLocaleString('th-TH',{maximumFractionDigits:0});
 
+const UI = () => (typeof PEAUI !== 'undefined' ? PEAUI : null);
+function beepUI(kind){ const u = UI(); if(u) u.beep(kind); }
 function toast(msg, ms=2400){
+  const m = String(msg || '');
+  beepUI(/ไม่สำเร็จ|ผิดพลาด|ไม่ได้|ล้มเหลว|ออฟไลน์/.test(m) ? 'err' : /แล้ว|สำเร็จ/.test(m) ? 'ok' : 'tap');
   const t = el(`<div class="toast">${esc(msg)}</div>`);
   $('#toast').appendChild(t);
   setTimeout(()=>t.remove(), ms);
@@ -391,15 +408,33 @@ function logout(){
 /* ============ เริ่มต้นแอป ============ */
 async function startApp(){
   $('#login').classList.add('hide');
-  splash('กำลังโหลดข้อมูล…');
+  const u = UI();
+  if(u){
+    u.setTips(TIPS);
+    u.boot.start([
+      { k:'data', t:'ดึงใบงานและรอบตรวจรับ' },
+      { k:'sum',  t:'คำนวณสรุปและงวดเงิน' },
+      { k:'view', t:'จัดหน้าจอและแผนที่' }
+    ], { title:'งานตัดต้นไม้', sub:'กฟส.อ่าวลึก · ปี ' + S.year });
+    u.boot.step('data','run');
+  } else splash('กำลังโหลดข้อมูล…');
+
   if(S.user) $('#whoami').textContent = S.user.name || '';
   await loadYear(S.year);
   if(!S.data){
+    if(u) u.boot.step('data','skip','โหลดไม่สำเร็จ');
     splash('โหลดข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง');
+    setTimeout(()=>{ if(u) u.boot.close(); }, 600);
     return;
+  }
+  if(u){
+    u.boot.step('data','done', ((S.data.jobs || []).length) + ' ใบงาน');
+    u.boot.step('sum','done');
+    u.boot.step('view','run');
   }
   $('#app').classList.remove('hide');
   splashOff();
+  if(u) setTimeout(()=>{ u.boot.step('view','done'); u.boot.close(); }, 350);
 }
 
 async function loadYear(year){
@@ -427,9 +462,15 @@ function renderYearSwitch(){
 async function switchYear(y){
   if(y === S.year) return;
   S.sld = S.sld;                     // พิกัดใช้ร่วมกันทุกปี ไม่ต้องดึงใหม่
-  splash('กำลังโหลดข้อมูลปี ' + y + '…');
+  const u = UI();
+  if(u){
+    u.setTips(TIPS);
+    u.boot.start([{ k:'y', t:'ดึงข้อมูลปี ' + y }], { title:'งานตัดต้นไม้', sub:'กำลังสลับไปปี ' + y });
+    u.boot.step('y','run');
+  } else splash('กำลังโหลดข้อมูลปี ' + y + '…');
   await loadYear(y);
   splashOff();
+  if(u){ u.boot.step('y','done'); u.boot.close(); }
 }
 
 /* ============ การคำนวณสรุป ============ */
@@ -728,10 +769,12 @@ async function togglePay(payId, btn){
   const next = String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0 ? 'รอตั้งเบิก' : 'เบิกจ่ายแล้ว';
   if(btn){ btn.disabled = true; btn.textContent = 'กำลังรอ…'; }
   try{
+    if(UI()) UI().saving.show('กำลังบันทึกสถานะงวดเงิน');
     await api('savePayment', {payId, fields:{Status:next}});
-    p.Status = next; renderPay(); toast('บันทึกแล้ว');
+    p.Status = next; renderPay();
+    if(UI()) UI().saving.done('บันทึกสถานะงวดเงินแล้ว', next); else toast('บันทึกแล้ว');
   }catch(e){
-    toast(e.message);
+    if(UI()) UI().saving.fail('บันทึกไม่สำเร็จ', e.message); else toast(e.message);
     if(btn){ btn.disabled = false; btn.textContent = 'สลับสถานะ'; }
   }
 }
@@ -851,14 +894,16 @@ async function saveRound(roundId){
     SAPTimeDate: $('#sp-'+roundId).value,
     Status:      $('#st-'+roundId).value
   };
+  const u = UI();
+  if(u) u.saving.show('กำลังบันทึกรอบตรวจรับขึ้นชีต');
   try{
     await api('saveRound', {roundId, fields});
     const r = S.data.rounds.find(x => x.RoundID === roundId);
     if(r) Object.assign(r, fields);
-    toast('บันทึกแล้ว');
+    if(u) u.saving.done('บันทึกรอบนี้แล้ว', roundId); else toast('บันทึกแล้ว');
     if(S.view==='dash') renderDash();
     if(S.view==='jobs') renderJobs();
-  }catch(e){ toast(e.message); }
+  }catch(e){ if(u) u.saving.fail('บันทึกไม่สำเร็จ', e.message); else toast(e.message); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = 'บันทึกรอบนี้'; } }
 }
 
@@ -935,6 +980,7 @@ function grabGps(){
 async function saveFinding(jobId){
   const btn = $('#f-save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
   const file = $('#f-photo').files[0];
+  if(UI()) UI().saving.show(file ? 'กำลังย่อรูปและส่งขึ้นระบบ' : 'กำลังบันทึกจุดที่พบ');
   const finding = {
     JobID: jobId, RoundID: $('#f-round').value, DeviceID: $('#f-dev').value,
     Lat: $('#f-lat').value, Lng: $('#f-lng').value,
@@ -944,11 +990,13 @@ async function saveFinding(jobId){
     let photoBase64 = '';
     if(file) photoBase64 = await shrinkImage(file);
     const out = await api('addFinding', {finding, photoBase64, photoName: finding.DeviceID || jobId});
+    if(UI()) UI().saving.done('บันทึกจุดที่พบแล้ว', out.findId || '');
     S.data.findings.push(Object.assign({FindID: out.findId, PhotoBefore: out.photo,
       Reporter: (S.user && S.user.name) || '', ReportDate: new Date().toISOString().slice(0,10), Status:'รอปรับปรุง'}, finding));
     closeSheet(); toast('บันทึกจุดที่พบแล้ว');
   }catch(e){
     queueOffline({action:'addFinding', finding});
+    if(UI()) UI().saving.done('เก็บไว้ในเครื่องแล้ว', 'จะส่งขึ้นระบบให้เองเมื่อมีสัญญาณ');
     closeSheet(); toast('ออฟไลน์ — เก็บไว้ส่งเมื่อมีสัญญาณ');
   }
 }
