@@ -1078,12 +1078,100 @@ async function loadMvLines(){
   if(MVLINES || mvLinesTried) return MVLINES;
   mvLinesTried = true;
   try{
-    const r = await fetch('../sld-ala/mv-lines.json', { cache: 'force-cache' });
+    const r = await fetchTimed('../sld-ala/mv-lines.json', { cache: 'force-cache' }, 10000);
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     MVLINES = (j && j.lines) ? j : null;
   }catch(e){ MVLINES = null; }
   return MVLINES;
+}
+
+/* ===== พิกัดอุปกรณ์สำหรับแผนที่ =====
+   เดิม: เรียก Apps Script ทุกครั้ง → ตื่นเครื่อง + เปิดชีต SLD ข้ามไฟล์ + อ่าน ~2,300 แถว
+         บางครั้งใช้เวลานานจนเหมือนค้าง เพราะ fetch ไม่มีกำหนดเวลา
+   ใหม่: 1) มีแคชในเครื่อง → ใช้ทันที แล้วค่อยไปเช็กของใหม่เบื้องหลัง
+         2) ดึงไฟล์นิ่ง ../sld-ala/devices.csv จาก GitHub Pages (เร็ว ไม่ผ่าน GAS)
+         3) ถ้าไฟล์นิ่งใช้ไม่ได้ ค่อยถอยไปเรียกหลังบ้านแบบเดิม
+         ทุกขั้นมีกำหนดเวลา ถ้าเกินเวลาจะเลิกรอ ไม่ค้างหน้าจอ */
+const SLD_PTS_KEY = LS + '_sldpts_v1';
+
+async function fetchTimed(url, opt, ms){
+  const ctl = new AbortController();
+  const t = setTimeout(()=> ctl.abort(), ms);
+  try{ return await fetch(url, Object.assign({ signal: ctl.signal }, opt || {})); }
+  finally{ clearTimeout(t); }
+}
+
+function parseDevicesCsv(txt){
+  const rows = String(txt).split(/\r?\n/);
+  if(rows.length < 2) return [];
+  const head = rows[0].replace(/^﻿/, '').split(',').map(x=> x.trim());
+  const ix = n => head.indexOf(n);
+  const iF = ix('Feeder'), iId = ix('DeviceID'), iT = ix('Type'), iD = ix('Description'),
+        iLa = ix('Lat'), iLo = ix('Lon'), iP = ix('ParentID');
+  if(iId < 0 || iLa < 0 || iLo < 0) return [];
+  const out = [];
+  for(let i = 1; i < rows.length; i++){
+    const c = rows[i].split(',');
+    if(c.length < 3) continue;
+    const la = parseFloat(c[iLa]), lo = parseFloat(c[iLo]);
+    if(!isFinite(la) || !isFinite(lo) || !la || !lo) continue;
+    out.push({ id: c[iId], feeder: iF >= 0 ? c[iF] : '', type: iT >= 0 ? c[iT] : '',
+               desc: iD >= 0 ? c[iD] : '', lat: la, lng: lo, parent: iP >= 0 ? c[iP] : '' });
+  }
+  return out;
+}
+
+async function fetchSldPointsFresh(){
+  // ไฟล์นิ่งก่อน
+  try{
+    const r = await fetchTimed('../sld-ala/devices.csv', { cache: 'no-cache' }, 8000);
+    if(r.ok){
+      const pts = parseDevicesCsv(await r.text());
+      if(pts.length > 50) return pts;
+    }
+  }catch(e){}
+  // ถอยไปหลังบ้าน
+  try{
+    const ctl = new AbortController();
+    const t = setTimeout(()=> ctl.abort(), 20000);
+    const res = await fetch(API_URL, {
+      method:'POST', redirect:'follow', signal: ctl.signal,
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'sldPoints', user: S.user ? S.user.name : '', token: S.token })
+    });
+    clearTimeout(t);
+    const out = await res.json();
+    if(out && out.ok && out.points && out.points.length) return out.points;
+  }catch(e){}
+  return null;
+}
+
+async function loadSldPoints(onFresh){
+  let cached = null;
+  try{
+    const c = JSON.parse(localStorage.getItem(SLD_PTS_KEY) || 'null');
+    if(c && Array.isArray(c.pts) && c.pts.length) cached = c.pts;
+  }catch(e){}
+
+  const refresh = fetchSldPointsFresh().then(pts => {
+    if(pts && pts.length){
+      try{ localStorage.setItem(SLD_PTS_KEY, JSON.stringify({ t: Date.now(), pts })); }catch(e){}
+      return pts;
+    }
+    return null;
+  });
+
+  if(cached){
+    // มีของเก่าอยู่แล้ว วาดเลย แล้วค่อยอัปเดตเงียบๆ ถ้าของใหม่ไม่เหมือนเดิม
+    refresh.then(pts => {
+      if(pts && pts.length !== cached.length){ S.sld = pts; if(onFresh) onFresh(); }
+    });
+    return cached;
+  }
+  const fresh = await refresh;
+  if(!fresh) toast('ดึงพิกัดอุปกรณ์ไม่สำเร็จ — ลองเปิดแผนที่อีกครั้ง', 4200);
+  return fresh || [];
 }
 
 async function renderMap(){
@@ -1096,12 +1184,9 @@ async function renderMap(){
   try{ map.resize(); }catch(e){}
 
   if(!S.sld){
-    busy(box, 'กำลังดึงพิกัดอุปกรณ์จากระบบ SLD…');
+    busy(box, 'กำลังดึงพิกัดอุปกรณ์…');
     try{
-      const out = await api('sldPoints');
-      S.sld = out.points || [];
-      S.sldFeeders = out.feeders || [];
-      if(out.note) toast(out.note, 4200);
+      S.sld = await loadSldPoints(()=>{ if(S.view === 'map') renderMap(); });
     }catch(e){
       S.sld = [];
       toast(e.message, 4200);
