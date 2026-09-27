@@ -5,6 +5,14 @@
 <!-- ไม่ใส่ viewport-fit=cover เหมือนงานพาโทรล เพื่อให้แถบเมนูล่างชนขอบจอ ไม่มีแถบคั่น -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>งานตัดต้นไม้ กฟส.อ่าวลึก</title>
+<meta name="theme-color" content="#4b2e83">
+<link rel="manifest" href="tree-manifest.json">
+<link rel="icon" type="image/png" href="tree-icon-192.png">
+<link rel="apple-touch-icon" href="tree-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ตัดต้นไม้">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -1338,15 +1346,24 @@ async function renderMap(){
   });
 
   if(minLon <= maxLon && minLat <= maxLat){
-    // ถ้ามีของอยู่จุดเดียว กรอบจะกว้าง 0 แล้ว Longdo จะถอยไปดูทั้งโลก
-    // จึงถ่างกรอบออกอย่างน้อย ~1 กม. เสมอ
+    // Longdo รับกรอบเป็น "อาร์เรย์ของพิกัด" ไม่ใช่อ็อบเจกต์ {minLon,...}
+    // (ส่งเป็นอ็อบเจกต์จะถูกเมินเงียบ ๆ แล้วแผนที่ค้างอยู่มุมมองเดิม)
+    // ถ้ามีของจุดเดียว กรอบจะกว้าง 0 จึงถ่างออกอย่างน้อย ~1 กม. เสมอ
     const padW = Math.max(0, (0.01 - (maxLon - minLon)) / 2);
     const padH = Math.max(0, (0.01 - (maxLat - minLat)) / 2);
-    try{ map.bound({ minLon: minLon - padW, minLat: minLat - padH,
-                     maxLon: maxLon + padW, maxLat: maxLat + padH }); }catch(e){}
+    const box = [
+      { lon: minLon - padW, lat: minLat - padH },
+      { lon: maxLon + padW, lat: maxLat + padH }
+    ];
+    try{ map.bound(box); }
+    catch(e){
+      // เผื่อ API รุ่นที่รับเป็นอ็อบเจกต์
+      try{ map.bound({ minLon: box[0].lon, minLat: box[0].lat,
+                       maxLon: box[1].lon, maxLat: box[1].lat }); }catch(e2){}
+    }
   }else{
     // ไม่มีอะไรให้วาดเลย อย่างน้อยให้อยู่แถวอ่าวลึก ไม่ใช่กลางมหาสมุทร
-    try{ map.location({ lon: 98.735, lat: 8.385 }); map.zoom(12); }catch(e){}
+    try{ map.location({ lon: 98.735, lat: 8.385 }, true); map.zoom(12, true); }catch(e){}
   }
 
   const hint = document.getElementById('mapHint');
