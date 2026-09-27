@@ -1070,6 +1070,22 @@ function ensureMap(){
   return S.map;
 }
 
+// ===== แนวสายจริงจาก GIS — ใช้ไฟล์ชุดเดียวกับหน้า SLD ที่อยู่โดเมนเดียวกัน =====
+// โครงไฟล์: { colors:{...}, lines:{ ALA01:[{m:1|0, v:[[lat,lon],...]}, ...] } }
+// ถ้าโหลดไม่ได้ (เช่นย้ายที่เก็บไฟล์) จะถอยกลับไปวาดเส้นตรงแบบเดิมให้เอง แผนที่ไม่หาย
+let MVLINES = null, mvLinesTried = false;
+async function loadMvLines(){
+  if(MVLINES || mvLinesTried) return MVLINES;
+  mvLinesTried = true;
+  try{
+    const r = await fetch('../sld-ala/mv-lines.json', { cache: 'force-cache' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    MVLINES = (j && j.lines) ? j : null;
+  }catch(e){ MVLINES = null; }
+  return MVLINES;
+}
+
 async function renderMap(){
   const box = $('#v-map');
   const map = ensureMap();
@@ -1119,13 +1135,40 @@ async function renderMap(){
   const seen = (lon,lat)=>{ minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon);
                             minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); };
 
+  // วาดแนวสายจริงก่อน สีเดียวกับสถานะรอบล่าสุดของวงจรนั้น
+  // วงจรไหนไม่มีแนวสายในไฟล์ GIS จะตกไปใช้เส้นตรงแบบเดิมในลูปข้างล่าง
+  const mvDone = new Set();
+  const mv = await loadMvLines();
+  if(mv){
+    Object.keys(feederColor).forEach(f => {
+      const segs = mv.lines[f];
+      if(!segs || !segs.length) return;
+      const color = feederColor[f];
+      const jobs = jobsByFeeder[f] || [];
+      const detail = `แนวสายจริงจาก GIS` +
+        (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : '');
+      segs.forEach(sg => {
+        if(!sg.v || sg.v.length < 2) return;
+        try{
+          map.Overlays.add(new longdo.Polyline(
+            sg.v.map(c => ({ lon: c[1], lat: c[0] })),
+            { title: f || 'ช่วงสาย', detail: detail,
+              lineWidth: sg.m ? 4.5 : 2.2, lineColor: color, clickable: true }
+          ));
+          drawn++;
+        }catch(e){}
+      });
+      mvDone.add(f);
+    });
+  }
+
   pts.forEach(p => {
     const f = (p.feeder||'').toUpperCase();
     const color = feederColor[f] || '#9A958C';
     const jobs = jobsByFeeder[f] || [];
     seen(p.lng, p.lat);
 
-    const par = p.parent && byId[p.parent];
+    const par = (!mvDone.has(f)) && p.parent && byId[p.parent];
     if(par){
       try{
         map.Overlays.add(new longdo.Polyline(
