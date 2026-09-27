@@ -1102,22 +1102,60 @@ async function fetchTimed(url, opt, ms){
   finally{ clearTimeout(t); }
 }
 
+/* แยกหนึ่งบรรทัด CSV โดยเคารพเครื่องหมายคำพูด
+   จำเป็นจริง ๆ เพราะคอลัมน์ Description มีลูกน้ำอยู่ข้างใน เช่น
+   "บ.แฟกซ์ไลท์ จำกัด สถานีบ้านช่องสระ ม,2 ต.เขาเขน"
+   ถ้าใช้ split(',') เฉย ๆ คอลัมน์จะเลื่อน แล้วได้พิกัดผิดไปคนละทวีป */
+function splitCsvLine(line){
+  const out = [];
+  let cur = '', q = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(q){
+      if(ch === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }   // "" = อัญประกาศจริงหนึ่งตัว
+        else q = false;
+      } else cur += ch;
+    } else {
+      if(ch === '"') q = true;
+      else if(ch === ','){ out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 function parseDevicesCsv(txt){
-  const rows = String(txt).split(/\r?\n/);
+  const raw = String(txt).split(/\r?\n/);
+  // ถ้าอัญประกาศเปิดค้างไว้ แปลว่าค่านั้นคร่อมหลายบรรทัด ให้ต่อบรรทัดถัดไปเข้าด้วยกัน
+  const rows = [];
+  for(let i = 0; i < raw.length; i++){
+    let line = raw[i];
+    while(((line.match(/"/g) || []).length % 2) === 1 && i + 1 < raw.length){
+      line += '\n' + raw[++i];
+    }
+    rows.push(line);
+  }
   if(rows.length < 2) return [];
-  const head = rows[0].replace(/^﻿/, '').split(',').map(x=> x.trim());
+  const head = splitCsvLine(rows[0].replace(/^﻿/, '')).map(x=> x.trim());
   const ix = n => head.indexOf(n);
   const iF = ix('Feeder'), iId = ix('DeviceID'), iT = ix('Type'), iD = ix('Description'),
         iLa = ix('Lat'), iLo = ix('Lon'), iP = ix('ParentID');
   if(iId < 0 || iLa < 0 || iLo < 0) return [];
   const out = [];
   for(let i = 1; i < rows.length; i++){
-    const c = rows[i].split(',');
+    const c = splitCsvLine(rows[i]);
     if(c.length < 3) continue;
     const la = parseFloat(c[iLa]), lo = parseFloat(c[iLo]);
     if(!isFinite(la) || !isFinite(lo) || !la || !lo) continue;
-    out.push({ id: c[iId], feeder: iF >= 0 ? c[iF] : '', type: iT >= 0 ? c[iT] : '',
-               desc: iD >= 0 ? c[iD] : '', lat: la, lng: lo, parent: iP >= 0 ? c[iP] : '' });
+    // กันพิกัดเพี้ยนอีกชั้น — นอกขอบเขตประเทศไทยถือว่าใช้ไม่ได้ ไม่ให้ไปถ่างกรอบแผนที่
+    if(la < 5 || la > 21 || lo < 96 || lo > 106) continue;
+    out.push({ id: String(c[iId]).trim(),
+               feeder: iF >= 0 ? String(c[iF]).trim().toUpperCase() : '',
+               type: iT >= 0 ? String(c[iT]).trim() : '',
+               desc: iD >= 0 ? String(c[iD]).trim() : '',
+               lat: la, lng: lo, parent: iP >= 0 ? String(c[iP]).trim() : '' });
   }
   return out;
 }
@@ -1208,12 +1246,15 @@ async function renderMap(){
   });
 
   const feederColor = {};
-  pts.forEach(p => {
-    const f = (p.feeder||'').toUpperCase();
+  const colorOf = f => {
     if(!f || feederColor[f]) return;
     const jobs = jobsByFeeder[f] || [];
     feederColor[f] = jobs.length ? statusColorOf(jobs[0].JobID, s) : '#9A958C';
-  });
+  };
+  pts.forEach(p => colorOf((p.feeder||'').toUpperCase()));
+  // วงจรที่มีใบงาน ต้องมีสีเสมอ แม้พิกัดอุปกรณ์จะยังมาไม่ถึง
+  // ไม่งั้นเส้นแนวสายจะไม่ถูกวาดเลยเมื่อดึงพิกัดไม่สำเร็จ
+  Object.keys(jobsByFeeder).forEach(colorOf);
 
   let drawn = 0;
   let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
@@ -1225,6 +1266,8 @@ async function renderMap(){
   const mvDone = new Set();
   const mv = await loadMvLines();
   if(mv){
+    // วงจรที่มีแนวสายแต่ยังไม่มีสี (ไม่มีใบงานและไม่มีจุดอุปกรณ์) ให้เป็นสีเทา "ยังไม่เริ่ม"
+    Object.keys(mv.lines).forEach(colorOf);
     Object.keys(feederColor).forEach(f => {
       const segs = mv.lines[f];
       if(!segs || !segs.length) return;
@@ -1234,6 +1277,7 @@ async function renderMap(){
         (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : '');
       segs.forEach(sg => {
         if(!sg.v || sg.v.length < 2) return;
+        sg.v.forEach(c => seen(c[1], c[0]));   // ให้แนวสายมีส่วนกำหนดกรอบแผนที่ด้วย
         try{
           map.Overlays.add(new longdo.Polyline(
             sg.v.map(c => ({ lon: c[1], lat: c[0] })),
@@ -1294,7 +1338,15 @@ async function renderMap(){
   });
 
   if(minLon <= maxLon && minLat <= maxLat){
-    try{ map.bound({ minLon, minLat, maxLon, maxLat }); }catch(e){}
+    // ถ้ามีของอยู่จุดเดียว กรอบจะกว้าง 0 แล้ว Longdo จะถอยไปดูทั้งโลก
+    // จึงถ่างกรอบออกอย่างน้อย ~1 กม. เสมอ
+    const padW = Math.max(0, (0.01 - (maxLon - minLon)) / 2);
+    const padH = Math.max(0, (0.01 - (maxLat - minLat)) / 2);
+    try{ map.bound({ minLon: minLon - padW, minLat: minLat - padH,
+                     maxLon: maxLon + padW, maxLat: maxLat + padH }); }catch(e){}
+  }else{
+    // ไม่มีอะไรให้วาดเลย อย่างน้อยให้อยู่แถวอ่าวลึก ไม่ใช่กลางมหาสมุทร
+    try{ map.location({ lon: 98.735, lat: 8.385 }); map.zoom(12); }catch(e){}
   }
 
   const hint = document.getElementById('mapHint');
