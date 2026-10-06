@@ -57,9 +57,6 @@ a{color:var(--pea2);text-decoration:none}
 .tabs button.on{color:var(--pea);font-weight:600;border-bottom-color:var(--pea)}
 #app{display:flex;flex-direction:column;min-height:100vh}
 main{flex:1;padding:20px;background:var(--ground)}
-/* แผ่นสีขาวรองขอบล่างสุดของเครื่อง — กันแถบว่างใต้เมนูล่างบนไอโฟน
-   ถ้าโครงแอปปิดไม่ถึงขอบจอจริง ส่วนที่เหลือจะเป็นสีขาวกลืนกับเมนู ไม่เห็นเป็นแถบ */
-#safebottom{display:none}
 .grid{display:grid;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
 .kpi .n{font-family:'Kanit';font-size:30px;font-weight:600;line-height:1.2}
@@ -117,9 +114,15 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
   /* โครงแบบแอป — ตรึงเต็มจอที่มองเห็นจริง ให้เลื่อนเฉพาะเนื้อหาข้างใน
      ไม่ใช้ 100vh เพราะบนมือถือ 100vh รวมพื้นที่ใต้แถบ URL ด้วย
      ทำให้หน้าสูงเกินจอ เลื่อนทั้งหน้าได้ และเหลือที่ว่างด้านล่าง */
-  html,body{height:100%;overscroll-behavior:none}
-  #app{position:fixed;inset:0;min-height:0;height:100dvh;overflow:hidden}
-  #safebottom{display:block;position:fixed;left:0;right:0;bottom:0;height:180px;background:#fff;z-index:-1}
+  /* พื้นหลังหน้าเว็บเป็นสีขาว — สำคัญบนไอโฟน เพราะพื้นที่ขอบล่างที่ระบบกันไว้
+     (นอกตัวหน้าเว็บ) ไอโฟนจะทาสีด้วยสีพื้นหลังของหน้านี้ ถ้าเป็นสีขาวจะกลืนกับเมนูล่าง
+     ส่วนพื้นสีครีมเดิมย้ายไปไว้ที่ตัวเนื้อหาแทน */
+  html,body{height:100%;overscroll-behavior:none;background:#FFFFFF}
+  /* ความสูงจริงที่ตาเห็น วัดด้วย JS (--vh) เชื่อถือได้กว่าทั้ง 100vh และ 100dvh
+     เพราะครอบคลุมทั้งเปิดจากหน้าจอโฮม เปิดในซาฟารี และตอนแป้นพิมพ์ขึ้น */
+  #app{position:fixed;top:0;left:0;right:0;bottom:auto;min-height:0;
+       height:var(--vh, 100dvh);overflow:hidden}
+  #splash{background:var(--ground)}
   .topbar{position:static;flex-shrink:0;padding:8px 12px;gap:8px;
           padding-top:calc(8px + env(safe-area-inset-top))}
   /* แถบหัวบนมือถือแคบ — ย่อปุ่มและซ่อนคำว่า "25" ของปี เพื่อให้ชื่อแอปไม่ถูกตัด
@@ -223,7 +226,6 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 </div>
 
 <!-- ======= ตัวแอป ======= -->
-<div id="safebottom" aria-hidden="true"></div>
 <div id="app" class="hide">
   <div class="topbar">
     <div class="tb-left">
@@ -287,6 +289,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
+const BUILD = '2026-10-06d';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -765,6 +768,9 @@ function renderDash(){
       <div class="sub" style="margin:2px 0 14px">อ้างอิงสถานะรอบล่าสุดของแต่ละใบงาน</div>
       ${todoList(s)}
     </div>
+  </div>
+  <div class="sub" style="text-align:center;margin:14px 0 2px;font-size:11px;opacity:.65">
+    รุ่นแอป ${BUILD} · ถ้าตัวเลขนี้ไม่ตรงกับที่แจ้งไว้ แปลว่าเครื่องยังใช้ไฟล์เก่าอยู่
   </div>`;
 }
 
@@ -1788,6 +1794,21 @@ async function renderMap(){
     hint.remove();
   }
 }
+
+/* ============ วัดความสูงจอจริง ============
+   บนมือถือ 100vh นับรวมพื้นที่ใต้แถบ URL และบางเครื่อง 100dvh ก็ยังไม่ตรง
+   จึงวัดจาก visualViewport ซึ่งคือ "พื้นที่ที่ตามองเห็นจริง" แล้วส่งเข้า CSS
+   ผ่านตัวแปร --vh ทำให้โครงแอปสูงพอดีจอทุกเครื่อง ไม่เหลือแถบว่างด้านล่าง */
+function fitShell(){
+  const vv = window.visualViewport;
+  const h = Math.round(vv ? vv.height : window.innerHeight);
+  if(h > 240) document.documentElement.style.setProperty('--vh', h + 'px');
+}
+fitShell();
+addEventListener('resize', fitShell);
+addEventListener('orientationchange', ()=>{ setTimeout(fitShell, 120); setTimeout(fitShell, 500); });
+addEventListener('pageshow', fitShell);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', fitShell);
 
 /* กลับมาที่แท็บนี้เมื่อไร ให้เช็กว่ามีคนอื่นแก้ข้อมูลหรือยัง
    (ที่ กฟส.อ่าวลึก มีหลายคนแก้พร้อมกัน จึงต้องดึงของคนอื่นมาด้วย) */
