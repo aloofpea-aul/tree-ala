@@ -1002,7 +1002,7 @@ const CON_COLORS = ['#1F6FB2', '#C2600C', '#7D3FA6', '#2A7D6E'];
 const GROUP_COLORS = { '1': '#4A1D62', '2': '#6D2E8E', '3': '#9A6BBE', '4': '#C4A8D9' };
 const DIM = '#BDB8AE';
 
-let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '' };
+let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '', geo: 'real' };
 
 function statusColorOf(jobId, sum){
   const rs = jobRoundState(jobId, sum);
@@ -1093,6 +1093,10 @@ function renderMapBar(sum){
       <option value="">กลุ่ม · ทั้งหมด</option>
       ${groups.map(g=>`<option value="${esc(g)}" ${mapFilter.group===g?'selected':''}>กลุ่มที่ ${esc(g)}</option>`).join('')}
     </select>
+    <select aria-label="แนวเส้น" onchange="setMapFilter('geo', this.value)">
+      <option value="real" ${mapFilter.geo==='real'?'selected':''}>แนวสายจริงจาก GIS</option>
+      <option value="straight" ${mapFilter.geo==='straight'?'selected':''}>เส้นตรงระหว่างอุปกรณ์</option>
+    </select>
     <select aria-label="ระบบ" onchange="setMapFilter('sys', this.value)">
       <option value="">ระบบ · ทั้งหมด</option>
       ${['HV','MV','LV'].map(x=>`<option ${mapFilter.sys===x?'selected':''}>${x}</option>`).join('')}
@@ -1102,6 +1106,42 @@ function renderMapBar(sum){
 
 function setMapMode(m){ mapFilter.mode = m; renderMap(); }
 function setMapFilter(k, v){ mapFilter[k] = v; renderMap(); }
+
+/* แนวสายจริงจาก GIS — ไฟล์เดียวกับที่ระบบ SLD ใช้ */
+async function loadMvLines(){
+  if(S.mv !== undefined) return S.mv;
+  try{
+    const res = await fetch('../sld-ala/mv-lines.json', {cache:'force-cache'});
+    const j = await res.json();
+    const src = j.lines || j;
+    const out = {};
+    Object.keys(src).forEach(f => {
+      const arr = Array.isArray(src[f]) ? src[f] : [];
+      out[String(f).toUpperCase()] = arr.map(seg => {
+        const v = Array.isArray(seg) ? seg : (seg.v || seg.coords || []);
+        return {
+          main: seg && seg.m ? 1 : 0,
+          v: v.map(c => Array.isArray(c) ? { lat: +c[0], lon: +c[1] } : { lat: +c.lat, lon: +c.lon })
+              .filter(c => isFinite(c.lat) && isFinite(c.lon))
+        };
+      }).filter(x => x.v.length > 1);
+    });
+    S.mv = out;
+  }catch(e){ S.mv = null; }
+  return S.mv;
+}
+
+/* หาอุปกรณ์ที่ใกล้จุดนี้ที่สุด ภายในฟีดเดอร์เดียวกัน */
+function nearestDevice(lat, lon, list){
+  let best = null, bd = Infinity;
+  for(let i = 0; i < list.length; i++){
+    const p = list[i];
+    const dy = (p.lat - lat), dx = (p.lng - lon) * 0.99;
+    const d = dy*dy + dx*dx;
+    if(d < bd){ bd = d; best = p; }
+  }
+  return bd < 0.0004 ? best : null;   // ราว 2 กม. เป็นเพดานกันจับคู่ผิด
+}
 
 function ensureMap(){
   if(S.map) return S.map;
@@ -1184,45 +1224,91 @@ async function renderMap(){
     return statusColorOf(job.JobID, sum);
   };
 
+  if(mapFilter.geo === 'real' && S.mv === undefined){
+    busy(box, 'กำลังโหลดแนวสายจริงจาก GIS…');
+    await loadMvLines();
+    busyOff(box);
+    if(!S.mv) toast('ยังไม่พบไฟล์แนวสายจริง จึงวาดเป็นเส้นตรงระหว่างอุปกรณ์แทน', 4200);
+  }
+
   let drawn = 0;
   let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
   const seen = (lon,lat)=>{ minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon);
                             minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); };
 
+  const byFeederPts = {};
   pts.forEach(p => {
-    const jid = ownerOf(p);
-    const job = jobById[jid];
-    const ok = jobPasses(job);
-    const color = colorFor(job, ok);
     const f = (p.feeder||'').toUpperCase();
-    if(ok) seen(p.lng, p.lat);
+    (byFeederPts[f] = byFeederPts[f] || []).push(p);
+  });
 
-    const par = p.parent && byId[p.parent];
-    if(par){
+  const useReal = mapFilter.geo === 'real' && S.mv && Object.keys(S.mv).length > 0;
+
+  if(useReal){
+    /* วาดตามแนวสายจริงจาก GIS ชุดเดียวกับระบบ SLD */
+    Object.keys(S.mv).forEach(f => {
+      const list = byFeederPts[f] || [];
+      S.mv[f].forEach(item => {
+        const seg = item.v;
+        const mid = seg[Math.floor(seg.length / 2)];
+        const near = list.length ? nearestDevice(mid.lat, mid.lon, list) : null;
+        const job = near ? jobById[ownerOf(near)] : null;
+        const ok = jobPasses(job);
+        const color = colorFor(job, ok);
+        if(ok) seg.forEach(c => seen(c.lon, c.lat));
+        try{
+          map.Overlays.add(new longdo.Polyline(
+            seg.map(c => ({ lon: c.lon, lat: c.lat })),
+            { title: job ? `${esc(job.MJMNo)} · ${esc(f)}` : esc(f),
+              detail: job
+                ? `${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}`
+                : 'แนวสาย ' + esc(f),
+              lineWidth: ok ? (item.main ? 5 : 3) : 1.5, lineColor: color, clickable: true }
+          ));
+          drawn++;
+        }catch(e){}
+      });
+    });
+  }else{
+    /* เส้นตรงระหว่างอุปกรณ์ตาม ParentID */
+    pts.forEach(p => {
+      const job = jobById[ownerOf(p)];
+      const ok = jobPasses(job);
+      const color = colorFor(job, ok);
+      const f = (p.feeder||'').toUpperCase();
+      if(ok) seen(p.lng, p.lat);
+      const par = p.parent && byId[p.parent];
+      if(!par) return;
       try{
         map.Overlays.add(new longdo.Polyline(
           [{ lon: par.lng, lat: par.lat }, { lon: p.lng, lat: p.lat }],
           { title: job ? `${esc(job.MJMNo)} · ${esc(f)}` : (f || 'ช่วงสาย'),
             detail: `${esc(par.id)} &rarr; ${esc(p.id)}` +
-                    (job ? `<br>${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}` +
-                           `<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}` : ''),
+                    (job ? `<br>${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}` : ''),
             lineWidth: ok ? 4 : 2, lineColor: color, clickable: true }
         ));
         drawn++;
       }catch(e){}
-    }
+    });
+  }
 
-    if(p.type === 'WS' || p.type === 'WR' || p.type === 'WB'){
-      try{
-        map.Overlays.add(new longdo.Marker({ lon: p.lng, lat: p.lat }, {
-          title: p.id,
-          detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}` +
-                  (job ? `<br>${esc(job.MJMNo)} · ${esc(job.Contractor)||'ยังไม่ระบุ'}` : ''),
-          icon: { html: `<div style="width:11px;height:11px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>`,
-                  offset: { x: 5, y: 5 } }
-        }));
-      }catch(e){}
-    }
+  /* หมุดอุปกรณ์หลัก */
+  pts.forEach(p => {
+    if(p.type !== 'WS' && p.type !== 'WR' && p.type !== 'WB') return;
+    const job = jobById[ownerOf(p)];
+    const ok = jobPasses(job);
+    const color = colorFor(job, ok);
+    const f = (p.feeder||'').toUpperCase();
+    if(!useReal || ok) seen(p.lng, p.lat);
+    try{
+      map.Overlays.add(new longdo.Marker({ lon: p.lng, lat: p.lat }, {
+        title: p.id,
+        detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}` +
+                (job ? `<br>${esc(job.MJMNo)} · ${esc(job.Contractor)||'ยังไม่ระบุ'}` : ''),
+        icon: { html: `<div style="width:11px;height:11px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>`,
+                offset: { x: 5, y: 5 } }
+      }));
+    }catch(e){}
   });
 
   S.data.findings.forEach(f => {
