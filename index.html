@@ -2,17 +2,8 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<!-- ไม่ใส่ viewport-fit=cover เหมือนงานพาโทรล เพื่อให้แถบเมนูล่างชนขอบจอ ไม่มีแถบคั่น -->
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>งานตัดต้นไม้ กฟส.อ่าวลึก</title>
-<meta name="theme-color" content="#4b2e83">
-<link rel="manifest" href="tree-manifest.json">
-<link rel="icon" type="image/png" href="tree-icon-192.png">
-<link rel="apple-touch-icon" href="tree-icon-180.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ตัดต้นไม้">
-<meta name="mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -83,8 +74,14 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .btn.ghost{background:#fff;border:1px solid #DDD9CF;color:var(--ink);font-weight:400}
 .btn.ok{background:var(--ok)}
 .btn:disabled{opacity:.55;cursor:default}
-#v-map{position:relative}
-#map{height:calc(100vh - 116px);min-height:420px}
+#v-map{position:relative;display:flex;flex-direction:column;height:calc(100vh - 116px);min-height:460px}
+#map{flex:1;min-height:300px;border-radius:12px;overflow:hidden}
+.mapbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-bottom:12px}
+.mapbar select{height:40px;padding:0 10px;border:1px solid #DDD9CF;border-radius:9px;background:#fff;font-size:13px}
+.mapbar .sum{font-size:12px;color:var(--muted);margin-left:auto;white-space:nowrap}
+.modeseg{display:flex;gap:4px;background:#EFEDE6;padding:3px;border-radius:9px}
+.modeseg button{border:0;background:transparent;padding:7px 12px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--muted)}
+.modeseg button.on{background:#fff;color:var(--pea);font-weight:600}
 .maplegend{position:absolute;left:12px;bottom:12px;z-index:20;background:rgba(255,255,255,.96);padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12px;line-height:1.9;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .maplegend i{display:inline-block;width:20px;height:5px;border-radius:3px;vertical-align:middle;margin-right:7px}
 /* --- ชั้นกำลังโหลด --- */
@@ -113,8 +110,9 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
   .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
   .bottomnav button.on{color:var(--pea);font-weight:600}
   .bottomnav svg{display:block;margin:0 auto 3px}
-  #v-map{position:relative}
-#map{height:calc(100vh - 150px)}
+  #v-map{height:calc(100vh - 186px)}
+  .mapbar select{height:38px;font-size:12px}
+  .mapbar .sum{margin-left:0;width:100%}
   table.resp thead{display:none}
   table.resp tr{display:block;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:10px;padding:10px}
   table.resp td{display:flex;justify-content:space-between;gap:10px;border:0;padding:4px 2px}
@@ -193,7 +191,10 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 
   <main>
     <div id="v-dash"></div>
-    <div id="v-map" class="hide"><div id="map"></div></div>
+    <div id="v-map" class="hide">
+      <div id="mapBar" class="mapbar"></div>
+      <div id="map"></div>
+    </div>
     <div id="v-jobs" class="hide"></div>
     <div id="v-pay" class="hide"></div>
   </main>
@@ -210,19 +211,6 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 <div id="toast"></div>
 
 <script src="https://api.longdo.com/map/?key=f61a87ff70c39e610385809783d5a1b3"></script>
-<script>
-/* ชุดกราฟิกกลางของแพลตฟอร์ม — ลองหาไฟล์จากหลายตำแหน่ง ถ้าไม่เจอแอปยังทำงานปกติ */
-(function(){
-  const paths = ['ui-kit.js', '../ui-kit.js', '../sld-ala/ui-kit.js', '/sld-ala/ui-kit.js'];
-  let i = 0;
-  (function next(){
-    if(i >= paths.length) return;
-    const t = document.createElement('script');
-    t.src = paths[i++]; t.onerror = next;
-    document.head.appendChild(t);
-  })();
-})();
-</script>
 <script>
 /* ============================================================
    ตั้งค่า — วาง URL ของ Web App ที่ Deploy จาก Apps Script
@@ -247,11 +235,7 @@ const num = v => { const n=parseFloat(String(v).replace(/,/g,'')); return isFini
 const fmt = (v,d=2) => num(v).toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmt0 = v => num(v).toLocaleString('th-TH',{maximumFractionDigits:0});
 
-const UI = () => (typeof PEAUI !== 'undefined' ? PEAUI : null);
-function beepUI(kind){ const u = UI(); if(u) u.beep(kind); }
 function toast(msg, ms=2400){
-  const m = String(msg || '');
-  beepUI(/ไม่สำเร็จ|ผิดพลาด|ไม่ได้|ล้มเหลว|ออฟไลน์/.test(m) ? 'err' : /แล้ว|สำเร็จ/.test(m) ? 'ok' : 'tap');
   const t = el(`<div class="toast">${esc(msg)}</div>`);
   $('#toast').appendChild(t);
   setTimeout(()=>t.remove(), ms);
@@ -417,33 +401,15 @@ function logout(){
 /* ============ เริ่มต้นแอป ============ */
 async function startApp(){
   $('#login').classList.add('hide');
-  const u = UI();
-  if(u){
-    u.setTips(TIPS);
-    u.boot.start([
-      { k:'data', t:'ดึงใบงานและรอบตรวจรับ' },
-      { k:'sum',  t:'คำนวณสรุปและงวดเงิน' },
-      { k:'view', t:'จัดหน้าจอและแผนที่' }
-    ], { title:'งานตัดต้นไม้', sub:'กฟส.อ่าวลึก · ปี ' + S.year });
-    u.boot.step('data','run');
-  } else splash('กำลังโหลดข้อมูล…');
-
+  splash('กำลังโหลดข้อมูล…');
   if(S.user) $('#whoami').textContent = S.user.name || '';
   await loadYear(S.year);
   if(!S.data){
-    if(u) u.boot.step('data','skip','โหลดไม่สำเร็จ');
     splash('โหลดข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง');
-    setTimeout(()=>{ if(u) u.boot.close(); }, 600);
     return;
-  }
-  if(u){
-    u.boot.step('data','done', ((S.data.jobs || []).length) + ' ใบงาน');
-    u.boot.step('sum','done');
-    u.boot.step('view','run');
   }
   $('#app').classList.remove('hide');
   splashOff();
-  if(u) setTimeout(()=>{ u.boot.step('view','done'); u.boot.close(); }, 350);
 }
 
 async function loadYear(year){
@@ -471,15 +437,9 @@ function renderYearSwitch(){
 async function switchYear(y){
   if(y === S.year) return;
   S.sld = S.sld;                     // พิกัดใช้ร่วมกันทุกปี ไม่ต้องดึงใหม่
-  const u = UI();
-  if(u){
-    u.setTips(TIPS);
-    u.boot.start([{ k:'y', t:'ดึงข้อมูลปี ' + y }], { title:'งานตัดต้นไม้', sub:'กำลังสลับไปปี ' + y });
-    u.boot.step('y','run');
-  } else splash('กำลังโหลดข้อมูลปี ' + y + '…');
+  splash('กำลังโหลดข้อมูลปี ' + y + '…');
   await loadYear(y);
   splashOff();
-  if(u){ u.boot.step('y','done'); u.boot.close(); }
 }
 
 /* ============ การคำนวณสรุป ============ */
@@ -778,12 +738,10 @@ async function togglePay(payId, btn){
   const next = String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0 ? 'รอตั้งเบิก' : 'เบิกจ่ายแล้ว';
   if(btn){ btn.disabled = true; btn.textContent = 'กำลังรอ…'; }
   try{
-    if(UI()) UI().saving.show('กำลังบันทึกสถานะงวดเงิน');
     await api('savePayment', {payId, fields:{Status:next}});
-    p.Status = next; renderPay();
-    if(UI()) UI().saving.done('บันทึกสถานะงวดเงินแล้ว', next); else toast('บันทึกแล้ว');
+    p.Status = next; renderPay(); toast('บันทึกแล้ว');
   }catch(e){
-    if(UI()) UI().saving.fail('บันทึกไม่สำเร็จ', e.message); else toast(e.message);
+    toast(e.message);
     if(btn){ btn.disabled = false; btn.textContent = 'สลับสถานะ'; }
   }
 }
@@ -903,16 +861,14 @@ async function saveRound(roundId){
     SAPTimeDate: $('#sp-'+roundId).value,
     Status:      $('#st-'+roundId).value
   };
-  const u = UI();
-  if(u) u.saving.show('กำลังบันทึกรอบตรวจรับขึ้นชีต');
   try{
     await api('saveRound', {roundId, fields});
     const r = S.data.rounds.find(x => x.RoundID === roundId);
     if(r) Object.assign(r, fields);
-    if(u) u.saving.done('บันทึกรอบนี้แล้ว', roundId); else toast('บันทึกแล้ว');
+    toast('บันทึกแล้ว');
     if(S.view==='dash') renderDash();
     if(S.view==='jobs') renderJobs();
-  }catch(e){ if(u) u.saving.fail('บันทึกไม่สำเร็จ', e.message); else toast(e.message); }
+  }catch(e){ toast(e.message); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = 'บันทึกรอบนี้'; } }
 }
 
@@ -989,7 +945,6 @@ function grabGps(){
 async function saveFinding(jobId){
   const btn = $('#f-save'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
   const file = $('#f-photo').files[0];
-  if(UI()) UI().saving.show(file ? 'กำลังย่อรูปและส่งขึ้นระบบ' : 'กำลังบันทึกจุดที่พบ');
   const finding = {
     JobID: jobId, RoundID: $('#f-round').value, DeviceID: $('#f-dev').value,
     Lat: $('#f-lat').value, Lng: $('#f-lng').value,
@@ -999,13 +954,11 @@ async function saveFinding(jobId){
     let photoBase64 = '';
     if(file) photoBase64 = await shrinkImage(file);
     const out = await api('addFinding', {finding, photoBase64, photoName: finding.DeviceID || jobId});
-    if(UI()) UI().saving.done('บันทึกจุดที่พบแล้ว', out.findId || '');
     S.data.findings.push(Object.assign({FindID: out.findId, PhotoBefore: out.photo,
       Reporter: (S.user && S.user.name) || '', ReportDate: new Date().toISOString().slice(0,10), Status:'รอปรับปรุง'}, finding));
     closeSheet(); toast('บันทึกจุดที่พบแล้ว');
   }catch(e){
     queueOffline({action:'addFinding', finding});
-    if(UI()) UI().saving.done('เก็บไว้ในเครื่องแล้ว', 'จะส่งขึ้นระบบให้เองเมื่อมีสัญญาณ');
     closeSheet(); toast('ออฟไลน์ — เก็บไว้ส่งเมื่อมีสัญญาณ');
   }
 }
@@ -1043,6 +996,14 @@ async function flushQueue(){
 window.addEventListener('online', flushQueue);
 
 /* ---------- แผนที่ (Longdo Map) ---------- */
+const MONTHS_TH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const CON_COLORS = ['#1F6FB2', '#C2600C', '#7D3FA6', '#2A7D6E'];
+const GROUP_COLORS = { '1': '#4A1D62', '2': '#6D2E8E', '3': '#9A6BBE', '4': '#C4A8D9' };
+const DIM = '#BDB8AE';
+
+let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '' };
+
 function statusColorOf(jobId, sum){
   const rs = jobRoundState(jobId, sum);
   const anyWait = rs.some(r => String(r.Status).indexOf('รอตรวจรับ')>=0 || String(r.Status).indexOf('จ่ายงาน')>=0);
@@ -1053,6 +1014,94 @@ function statusColorOf(jobId, sum){
   if(anyWait) return '#C98A16';
   return '#9A958C';
 }
+
+function contractorList(){
+  const seen = [];
+  (S.data ? S.data.jobs : []).forEach(j => {
+    const c = String(j.Contractor||'').trim();
+    if(c && seen.indexOf(c) < 0) seen.push(c);
+  });
+  return seen;
+}
+function contractorColor(name){
+  const i = contractorList().indexOf(String(name||'').trim());
+  return i >= 0 ? CON_COLORS[i % CON_COLORS.length] : '#9A958C';
+}
+
+/* ใบงานที่เป็นเจ้าของอุปกรณ์แต่ละตัว — ไล่จากไลน์แยกขึ้นไปหาต้นทาง */
+function buildOwnerIndex(sum, byId){
+  const byCode = {};
+  (S.data.lines || []).forEach(l => {
+    const c = String(l.LineCode||'').replace(/\s+/g,'').toUpperCase();
+    if(c) byCode[c] = l.JobID;
+  });
+  const mainByFeeder = {};
+  sum.jobs.forEach(j => {
+    if(String(j.MonthGroup) === '1' || j.System === 'HV'){
+      const f = String(j.FeederID||'').toUpperCase();
+      if(f && !mainByFeeder[f]) mainByFeeder[f] = j.JobID;
+    }
+  });
+  const cache = {};
+  return function ownerOf(p){
+    if(cache[p.id] !== undefined) return cache[p.id];
+    let cur = p, guard = 0, found = '';
+    while(cur && guard++ < 60){
+      const key = String(cur.id||'').replace(/\s+/g,'').toUpperCase();
+      if(byCode[key]){ found = byCode[key]; break; }
+      cur = cur.parent ? byId[cur.parent] : null;
+    }
+    if(!found) found = mainByFeeder[(p.feeder||'').toUpperCase()] || '';
+    cache[p.id] = found;
+    return found;
+  };
+}
+
+function jobPasses(j){
+  if(!j) return false;
+  if(mapFilter.con && String(j.Contractor||'').trim() !== mapFilter.con) return false;
+  if(mapFilter.group && String(j.MonthGroup) !== mapFilter.group) return false;
+  if(mapFilter.sys && j.System !== mapFilter.sys) return false;
+  if(mapFilter.month){
+    const m = String(j.PlanMonths||'');
+    if(m.indexOf(mapFilter.month) < 0) return false;
+  }
+  return true;
+}
+
+function renderMapBar(sum){
+  const cons = contractorList();
+  const groups = [...new Set(sum.jobs.map(j=>String(j.MonthGroup)).filter(g=>g && g!=='undefined'))].sort();
+  const pick = sum.jobs.filter(jobPasses);
+  const lines = (S.data.lines||[]).filter(l => pick.some(j => j.JobID === l.JobID));
+
+  $('#mapBar').innerHTML = `
+    <div class="modeseg">
+      <button class="${mapFilter.mode==='contractor'?'on':''}" onclick="setMapMode('contractor')">ผู้รับจ้าง</button>
+      <button class="${mapFilter.mode==='status'?'on':''}" onclick="setMapMode('status')">สถานะ</button>
+      <button class="${mapFilter.mode==='group'?'on':''}" onclick="setMapMode('group')">กลุ่ม</button>
+    </div>
+    <select aria-label="ผู้รับจ้าง" onchange="setMapFilter('con', this.value)">
+      <option value="">ผู้รับจ้าง · ทุกราย</option>
+      ${cons.map(c=>`<option ${mapFilter.con===c?'selected':''}>${esc(c)}</option>`).join('')}
+    </select>
+    <select aria-label="เดือนตามแผน" onchange="setMapFilter('month', this.value)">
+      <option value="">เดือน · ทั้งปี</option>
+      ${MONTHS_TH.map(m=>`<option ${mapFilter.month===m?'selected':''}>${m}</option>`).join('')}
+    </select>
+    <select aria-label="กลุ่มแผนงาน" onchange="setMapFilter('group', this.value)">
+      <option value="">กลุ่ม · ทั้งหมด</option>
+      ${groups.map(g=>`<option value="${esc(g)}" ${mapFilter.group===g?'selected':''}>กลุ่มที่ ${esc(g)}</option>`).join('')}
+    </select>
+    <select aria-label="ระบบ" onchange="setMapFilter('sys', this.value)">
+      <option value="">ระบบ · ทั้งหมด</option>
+      ${['HV','MV','LV'].map(x=>`<option ${mapFilter.sys===x?'selected':''}>${x}</option>`).join('')}
+    </select>
+    <div class="sum">ตรงเงื่อนไข ${pick.length} ใบงาน · ${fmt(pick.reduce((a,j)=>a+num(j.PlanKm),0))} กม.${lines.length?` · ${lines.length} ไลน์แยก`:''}</div>`;
+}
+
+function setMapMode(m){ mapFilter.mode = m; renderMap(); }
+function setMapFilter(k, v){ mapFilter[k] = v; renderMap(); }
 
 function ensureMap(){
   if(S.map) return S.map;
@@ -1066,254 +1115,98 @@ function ensureMap(){
       lastView: false
     });
   }catch(e){ return null; }
-  if(!document.getElementById('mapLegend')){
-    $('#v-map').appendChild(el(`<div id="mapLegend" class="maplegend">
-      <div style="font-weight:600;margin-bottom:4px">สถานะรอบล่าสุด</div>
-      <div><i style="background:#2F7A55"></i>ตรวจรับแล้ว</div>
-      <div><i style="background:#C98A16"></i>จ่ายงาน/รอตรวจรับ</div>
-      <div><i style="background:#9A958C"></i>ยังไม่เริ่ม</div>
-      <div><i style="background:#B4402E"></i>เกินกำหนดแผน</div>
-    </div>`));
-  }
   return S.map;
 }
 
-// ===== แนวสายจริงจาก GIS — ใช้ไฟล์ชุดเดียวกับหน้า SLD ที่อยู่โดเมนเดียวกัน =====
-// โครงไฟล์: { colors:{...}, lines:{ ALA01:[{m:1|0, v:[[lat,lon],...]}, ...] } }
-// ถ้าโหลดไม่ได้ (เช่นย้ายที่เก็บไฟล์) จะถอยกลับไปวาดเส้นตรงแบบเดิมให้เอง แผนที่ไม่หาย
-let MVLINES = null, mvLinesTried = false;
-async function loadMvLines(){
-  if(MVLINES || mvLinesTried) return MVLINES;
-  mvLinesTried = true;
-  try{
-    const r = await fetchTimed('../sld-ala/mv-lines.json', { cache: 'force-cache' }, 10000);
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    MVLINES = (j && j.lines) ? j : null;
-  }catch(e){ MVLINES = null; }
-  return MVLINES;
-}
-
-/* ===== พิกัดอุปกรณ์สำหรับแผนที่ =====
-   เดิม: เรียก Apps Script ทุกครั้ง → ตื่นเครื่อง + เปิดชีต SLD ข้ามไฟล์ + อ่าน ~2,300 แถว
-         บางครั้งใช้เวลานานจนเหมือนค้าง เพราะ fetch ไม่มีกำหนดเวลา
-   ใหม่: 1) มีแคชในเครื่อง → ใช้ทันที แล้วค่อยไปเช็กของใหม่เบื้องหลัง
-         2) ดึงไฟล์นิ่ง ../sld-ala/devices.csv จาก GitHub Pages (เร็ว ไม่ผ่าน GAS)
-         3) ถ้าไฟล์นิ่งใช้ไม่ได้ ค่อยถอยไปเรียกหลังบ้านแบบเดิม
-         ทุกขั้นมีกำหนดเวลา ถ้าเกินเวลาจะเลิกรอ ไม่ค้างหน้าจอ */
-const SLD_PTS_KEY = LS + '_sldpts_v1';
-
-async function fetchTimed(url, opt, ms){
-  const ctl = new AbortController();
-  const t = setTimeout(()=> ctl.abort(), ms);
-  try{ return await fetch(url, Object.assign({ signal: ctl.signal }, opt || {})); }
-  finally{ clearTimeout(t); }
-}
-
-/* แยกหนึ่งบรรทัด CSV โดยเคารพเครื่องหมายคำพูด
-   จำเป็นจริง ๆ เพราะคอลัมน์ Description มีลูกน้ำอยู่ข้างใน เช่น
-   "บ.แฟกซ์ไลท์ จำกัด สถานีบ้านช่องสระ ม,2 ต.เขาเขน"
-   ถ้าใช้ split(',') เฉย ๆ คอลัมน์จะเลื่อน แล้วได้พิกัดผิดไปคนละทวีป */
-function splitCsvLine(line){
-  const out = [];
-  let cur = '', q = false;
-  for(let i = 0; i < line.length; i++){
-    const ch = line[i];
-    if(q){
-      if(ch === '"'){
-        if(line[i+1] === '"'){ cur += '"'; i++; }   // "" = อัญประกาศจริงหนึ่งตัว
-        else q = false;
-      } else cur += ch;
-    } else {
-      if(ch === '"') q = true;
-      else if(ch === ','){ out.push(cur); cur = ''; }
-      else cur += ch;
-    }
+function renderMapLegend(sum){
+  let rows = '';
+  if(mapFilter.mode === 'contractor'){
+    rows = contractorList().map(c =>
+      `<div><i style="background:${contractorColor(c)}"></i>${esc(c)}</div>`).join('') +
+      `<div><i style="background:#9A958C"></i>ยังไม่ระบุผู้รับจ้าง</div>`;
+  }else if(mapFilter.mode === 'group'){
+    rows = Object.keys(GROUP_COLORS).map(g =>
+      `<div><i style="background:${GROUP_COLORS[g]}"></i>กลุ่มที่ ${g}</div>`).join('');
+  }else{
+    rows = `<div><i style="background:#2F7A55"></i>ตรวจรับแล้ว</div>
+            <div><i style="background:#C98A16"></i>จ่ายงาน/รอตรวจรับ</div>
+            <div><i style="background:#9A958C"></i>ยังไม่เริ่ม</div>
+            <div><i style="background:#B4402E"></i>เกินกำหนดแผน</div>`;
   }
-  out.push(cur);
-  return out;
-}
+  const anyFilter = mapFilter.con || mapFilter.month || mapFilter.group || mapFilter.sys;
+  if(anyFilter) rows += `<div><i style="background:${DIM}"></i>นอกเงื่อนไขที่กรอง</div>`;
 
-function parseDevicesCsv(txt){
-  const raw = String(txt).split(/\r?\n/);
-  // ถ้าอัญประกาศเปิดค้างไว้ แปลว่าค่านั้นคร่อมหลายบรรทัด ให้ต่อบรรทัดถัดไปเข้าด้วยกัน
-  const rows = [];
-  for(let i = 0; i < raw.length; i++){
-    let line = raw[i];
-    while(((line.match(/"/g) || []).length % 2) === 1 && i + 1 < raw.length){
-      line += '\n' + raw[++i];
-    }
-    rows.push(line);
+  let box = document.getElementById('mapLegend');
+  if(!box){
+    box = el('<div id="mapLegend" class="maplegend"></div>');
+    $('#v-map').appendChild(box);
   }
-  if(rows.length < 2) return [];
-  const head = splitCsvLine(rows[0].replace(/^﻿/, '')).map(x=> x.trim());
-  const ix = n => head.indexOf(n);
-  const iF = ix('Feeder'), iId = ix('DeviceID'), iT = ix('Type'), iD = ix('Description'),
-        iLa = ix('Lat'), iLo = ix('Lon'), iP = ix('ParentID');
-  if(iId < 0 || iLa < 0 || iLo < 0) return [];
-  const out = [];
-  for(let i = 1; i < rows.length; i++){
-    const c = splitCsvLine(rows[i]);
-    if(c.length < 3) continue;
-    const la = parseFloat(c[iLa]), lo = parseFloat(c[iLo]);
-    if(!isFinite(la) || !isFinite(lo) || !la || !lo) continue;
-    // กันพิกัดเพี้ยนอีกชั้น — นอกขอบเขตประเทศไทยถือว่าใช้ไม่ได้ ไม่ให้ไปถ่างกรอบแผนที่
-    if(la < 5 || la > 21 || lo < 96 || lo > 106) continue;
-    out.push({ id: String(c[iId]).trim(),
-               feeder: iF >= 0 ? String(c[iF]).trim().toUpperCase() : '',
-               type: iT >= 0 ? String(c[iT]).trim() : '',
-               desc: iD >= 0 ? String(c[iD]).trim() : '',
-               lat: la, lng: lo, parent: iP >= 0 ? String(c[iP]).trim() : '' });
-  }
-  return out;
-}
-
-async function fetchSldPointsFresh(){
-  // ไฟล์นิ่งก่อน
-  try{
-    const r = await fetchTimed('../sld-ala/devices.csv', { cache: 'no-cache' }, 8000);
-    if(r.ok){
-      const pts = parseDevicesCsv(await r.text());
-      if(pts.length > 50) return pts;
-    }
-  }catch(e){}
-  // ถอยไปหลังบ้าน
-  try{
-    const ctl = new AbortController();
-    const t = setTimeout(()=> ctl.abort(), 20000);
-    const res = await fetch(API_URL, {
-      method:'POST', redirect:'follow', signal: ctl.signal,
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'sldPoints', user: S.user ? S.user.name : '', token: S.token })
-    });
-    clearTimeout(t);
-    const out = await res.json();
-    if(out && out.ok && out.points && out.points.length) return out.points;
-  }catch(e){}
-  return null;
-}
-
-async function loadSldPoints(onFresh){
-  let cached = null;
-  try{
-    const c = JSON.parse(localStorage.getItem(SLD_PTS_KEY) || 'null');
-    if(c && Array.isArray(c.pts) && c.pts.length) cached = c.pts;
-  }catch(e){}
-
-  const refresh = fetchSldPointsFresh().then(pts => {
-    if(pts && pts.length){
-      try{ localStorage.setItem(SLD_PTS_KEY, JSON.stringify({ t: Date.now(), pts })); }catch(e){}
-      return pts;
-    }
-    return null;
-  });
-
-  if(cached){
-    // มีของเก่าอยู่แล้ว วาดเลย แล้วค่อยอัปเดตเงียบๆ ถ้าของใหม่ไม่เหมือนเดิม
-    refresh.then(pts => {
-      if(pts && pts.length !== cached.length){ S.sld = pts; if(onFresh) onFresh(); }
-    });
-    return cached;
-  }
-  const fresh = await refresh;
-  if(!fresh) toast('ดึงพิกัดอุปกรณ์ไม่สำเร็จ — ลองเปิดแผนที่อีกครั้ง', 4200);
-  return fresh || [];
+  const title = mapFilter.mode === 'contractor' ? 'ผู้รับจ้าง'
+              : mapFilter.mode === 'group' ? 'กลุ่มแผนงาน' : 'สถานะรอบล่าสุด';
+  box.innerHTML = `<div style="font-weight:600;margin-bottom:4px">${title}</div>${rows}`;
 }
 
 async function renderMap(){
   const box = $('#v-map');
   const map = ensureMap();
-  if(!map){
-    busy(box, 'โหลดแผนที่ไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง');
-    return;
-  }
+  if(!map){ busy(box, 'โหลดแผนที่ไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง'); return; }
   try{ map.resize(); }catch(e){}
 
   if(!S.sld){
-    busy(box, 'กำลังดึงพิกัดอุปกรณ์…');
+    busy(box, 'กำลังดึงพิกัดอุปกรณ์จากระบบ SLD…');
     try{
-      S.sld = await loadSldPoints(()=>{ if(S.view === 'map') renderMap(); });
-    }catch(e){
-      S.sld = [];
-      toast(e.message, 4200);
-    }
+      const out = await api('sldPoints');
+      S.sld = out.points || [];
+      S.sldFeeders = out.feeders || [];
+      if(out.note) toast(out.note, 4200);
+    }catch(e){ S.sld = []; toast(e.message, 4200); }
     busyOff(box);
   }
 
+  const sum = summarize();
+  renderMapBar(sum);
+  renderMapLegend(sum);
+
   try{ map.Overlays.clear(); }catch(e){}
 
-  const s = summarize();
   const pts = S.sld || [];
   const byId = {};
   pts.forEach(p => { if(p.id) byId[p.id] = p; });
+  const jobById = {};
+  sum.jobs.forEach(j => { jobById[j.JobID] = j; });
+  const ownerOf = buildOwnerIndex(sum, byId);
 
-  const jobsByFeeder = {};
-  s.jobs.forEach(j => {
-    const f = String(j.FeederID||'').toUpperCase();
-    (jobsByFeeder[f] = jobsByFeeder[f] || []).push(j);
-  });
-
-  const feederColor = {};
-  const colorOf = f => {
-    if(!f || feederColor[f]) return;
-    const jobs = jobsByFeeder[f] || [];
-    feederColor[f] = jobs.length ? statusColorOf(jobs[0].JobID, s) : '#9A958C';
+  const colorFor = (job, ok) => {
+    if(!ok) return DIM;
+    if(!job) return '#9A958C';
+    if(mapFilter.mode === 'contractor') return contractorColor(job.Contractor);
+    if(mapFilter.mode === 'group') return GROUP_COLORS[String(job.MonthGroup)] || '#9A958C';
+    return statusColorOf(job.JobID, sum);
   };
-  pts.forEach(p => colorOf((p.feeder||'').toUpperCase()));
-  // วงจรที่มีใบงาน ต้องมีสีเสมอ แม้พิกัดอุปกรณ์จะยังมาไม่ถึง
-  // ไม่งั้นเส้นแนวสายจะไม่ถูกวาดเลยเมื่อดึงพิกัดไม่สำเร็จ
-  Object.keys(jobsByFeeder).forEach(colorOf);
 
   let drawn = 0;
   let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
   const seen = (lon,lat)=>{ minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon);
                             minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); };
 
-  // วาดแนวสายจริงก่อน สีเดียวกับสถานะรอบล่าสุดของวงจรนั้น
-  // วงจรไหนไม่มีแนวสายในไฟล์ GIS จะตกไปใช้เส้นตรงแบบเดิมในลูปข้างล่าง
-  const mvDone = new Set();
-  const mv = await loadMvLines();
-  if(mv){
-    // วงจรที่มีแนวสายแต่ยังไม่มีสี (ไม่มีใบงานและไม่มีจุดอุปกรณ์) ให้เป็นสีเทา "ยังไม่เริ่ม"
-    Object.keys(mv.lines).forEach(colorOf);
-    Object.keys(feederColor).forEach(f => {
-      const segs = mv.lines[f];
-      if(!segs || !segs.length) return;
-      const color = feederColor[f];
-      const jobs = jobsByFeeder[f] || [];
-      const detail = `แนวสายจริงจาก GIS` +
-        (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : '');
-      segs.forEach(sg => {
-        if(!sg.v || sg.v.length < 2) return;
-        sg.v.forEach(c => seen(c[1], c[0]));   // ให้แนวสายมีส่วนกำหนดกรอบแผนที่ด้วย
-        try{
-          map.Overlays.add(new longdo.Polyline(
-            sg.v.map(c => ({ lon: c[1], lat: c[0] })),
-            { title: f || 'ช่วงสาย', detail: detail,
-              lineWidth: sg.m ? 4.5 : 2.2, lineColor: color, clickable: true }
-          ));
-          drawn++;
-        }catch(e){}
-      });
-      mvDone.add(f);
-    });
-  }
-
   pts.forEach(p => {
+    const jid = ownerOf(p);
+    const job = jobById[jid];
+    const ok = jobPasses(job);
+    const color = colorFor(job, ok);
     const f = (p.feeder||'').toUpperCase();
-    const color = feederColor[f] || '#9A958C';
-    const jobs = jobsByFeeder[f] || [];
-    seen(p.lng, p.lat);
+    if(ok) seen(p.lng, p.lat);
 
-    const par = (!mvDone.has(f)) && p.parent && byId[p.parent];
+    const par = p.parent && byId[p.parent];
     if(par){
       try{
         map.Overlays.add(new longdo.Polyline(
           [{ lon: par.lng, lat: par.lat }, { lon: p.lng, lat: p.lat }],
-          { title: f || 'ช่วงสาย',
+          { title: job ? `${esc(job.MJMNo)} · ${esc(f)}` : (f || 'ช่วงสาย'),
             detail: `${esc(par.id)} &rarr; ${esc(p.id)}` +
-                    (jobs.length ? `<br>${jobs.length} ใบงาน · ${fmt(jobs.reduce((a,j)=>a+num(j.PlanKm),0))} กม.` : ''),
-            lineWidth: 4, lineColor: color, clickable: true }
+                    (job ? `<br>${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}` +
+                           `<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}` : ''),
+            lineWidth: ok ? 4 : 2, lineColor: color, clickable: true }
         ));
         drawn++;
       }catch(e){}
@@ -1323,7 +1216,8 @@ async function renderMap(){
       try{
         map.Overlays.add(new longdo.Marker({ lon: p.lng, lat: p.lat }, {
           title: p.id,
-          detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}`,
+          detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}` +
+                  (job ? `<br>${esc(job.MJMNo)} · ${esc(job.Contractor)||'ยังไม่ระบุ'}` : ''),
           icon: { html: `<div style="width:11px;height:11px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>`,
                   offset: { x: 5, y: 5 } }
         }));
@@ -1346,29 +1240,12 @@ async function renderMap(){
   });
 
   if(minLon <= maxLon && minLat <= maxLat){
-    // Longdo รับกรอบเป็น "อาร์เรย์ของพิกัด" ไม่ใช่อ็อบเจกต์ {minLon,...}
-    // (ส่งเป็นอ็อบเจกต์จะถูกเมินเงียบ ๆ แล้วแผนที่ค้างอยู่มุมมองเดิม)
-    // ถ้ามีของจุดเดียว กรอบจะกว้าง 0 จึงถ่างออกอย่างน้อย ~1 กม. เสมอ
-    const padW = Math.max(0, (0.01 - (maxLon - minLon)) / 2);
-    const padH = Math.max(0, (0.01 - (maxLat - minLat)) / 2);
-    const box = [
-      { lon: minLon - padW, lat: minLat - padH },
-      { lon: maxLon + padW, lat: maxLat + padH }
-    ];
-    try{ map.bound(box); }
-    catch(e){
-      // เผื่อ API รุ่นที่รับเป็นอ็อบเจกต์
-      try{ map.bound({ minLon: box[0].lon, minLat: box[0].lat,
-                       maxLon: box[1].lon, maxLat: box[1].lat }); }catch(e2){}
-    }
-  }else{
-    // ไม่มีอะไรให้วาดเลย อย่างน้อยให้อยู่แถวอ่าวลึก ไม่ใช่กลางมหาสมุทร
-    try{ map.location({ lon: 98.735, lat: 8.385 }, true); map.zoom(12, true); }catch(e){}
+    try{ map.bound({ minLon, minLat, maxLon, maxLat }); }catch(e){}
   }
 
   const hint = document.getElementById('mapHint');
   if(!drawn && !hint){
-    $('#v-map').appendChild(el(`<div id="mapHint" class="card" style="position:absolute;right:12px;top:12px;z-index:20;max-width:280px">
+    $('#v-map').appendChild(el(`<div id="mapHint" class="card" style="position:absolute;right:12px;top:66px;z-index:20;max-width:280px">
       <div style="font-weight:600;margin-bottom:6px">ยังไม่มีพิกัดจากระบบ SLD</div>
       <div class="sub">ตรวจค่า SLD_SHEET_ID ในแท็บ Config ของชีต TreeALA_DB แล้วรีเฟรชหน้านี้</div></div>`));
   }else if(drawn && hint){
