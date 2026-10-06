@@ -1002,7 +1002,7 @@ const CON_COLORS = ['#1F6FB2', '#C2600C', '#7D3FA6', '#2A7D6E'];
 const GROUP_COLORS = { '1': '#4A1D62', '2': '#6D2E8E', '3': '#9A6BBE', '4': '#C4A8D9' };
 const DIM = '#BDB8AE';
 
-let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '', geo: 'real' };
+let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '', geo: 'real', detail: 'line' };
 
 function statusColorOf(jobId, sum){
   const rs = jobRoundState(jobId, sum);
@@ -1043,13 +1043,17 @@ function buildOwnerIndex(sum, byId){
     }
   });
   const cache = {};
+  const detail = mapFilter.detail === 'line';
   return function ownerOf(p){
     if(cache[p.id] !== undefined) return cache[p.id];
-    let cur = p, guard = 0, found = '';
-    while(cur && guard++ < 60){
-      const key = String(cur.id||'').replace(/\s+/g,'').toUpperCase();
-      if(byCode[key]){ found = byCode[key]; break; }
-      cur = cur.parent ? byId[cur.parent] : null;
+    let found = '';
+    if(detail){
+      let cur = p, guard = 0;
+      while(cur && guard++ < 60){
+        const key = String(cur.id||'').replace(/\s+/g,'').toUpperCase();
+        if(byCode[key]){ found = byCode[key]; break; }
+        cur = cur.parent ? byId[cur.parent] : null;
+      }
     }
     if(!found) found = mainByFeeder[(p.feeder||'').toUpperCase()] || '';
     cache[p.id] = found;
@@ -1093,6 +1097,10 @@ function renderMapBar(sum){
       <option value="">กลุ่ม · ทั้งหมด</option>
       ${groups.map(g=>`<option value="${esc(g)}" ${mapFilter.group===g?'selected':''}>กลุ่มที่ ${esc(g)}</option>`).join('')}
     </select>
+    <select aria-label="ความละเอียดของสี" onchange="setMapFilter('detail', this.value)">
+      <option value="line" ${mapFilter.detail==='line'?'selected':''}>สีละเอียดรายไลน์แยก</option>
+      <option value="feeder" ${mapFilter.detail==='feeder'?'selected':''}>สีหยาบรายฟีดเดอร์</option>
+    </select>
     <select aria-label="แนวเส้น" onchange="setMapFilter('geo', this.value)">
       <option value="real" ${mapFilter.geo==='real'?'selected':''}>แนวสายจริงจาก GIS</option>
       <option value="straight" ${mapFilter.geo==='straight'?'selected':''}>เส้นตรงระหว่างอุปกรณ์</option>
@@ -1108,10 +1116,10 @@ function setMapMode(m){ mapFilter.mode = m; renderMap(); }
 function setMapFilter(k, v){ mapFilter[k] = v; renderMap(); }
 
 /* แนวสายจริงจาก GIS — ไฟล์เดียวกับที่ระบบ SLD ใช้ */
-async function loadMvLines(){
-  if(S.mv !== undefined) return S.mv;
+async function loadGeoFile(url){
   try{
-    const res = await fetch('../sld-ala/mv-lines.json', {cache:'force-cache'});
+    const res = await fetch(url, {cache:'force-cache'});
+    if(!res.ok) return null;
     const j = await res.json();
     const src = j.lines || j;
     const out = {};
@@ -1126,8 +1134,21 @@ async function loadMvLines(){
         };
       }).filter(x => x.v.length > 1);
     });
-    S.mv = out;
-  }catch(e){ S.mv = null; }
+    return Object.keys(out).length ? out : null;
+  }catch(e){ return null; }
+}
+
+/* แนวสายจริงจาก GIS — ไฟล์ชุดเดียวกับระบบ SLD
+   mv-lines.json = ระบบจำหน่ายแรงสูง · lv-lines.json = แรงต่ำ (เพิ่มภายหลังได้ ไม่ต้องแก้โค้ด) */
+async function loadMvLines(){
+  if(S.mv !== undefined) return S.mv;
+  const r = await Promise.all([
+    loadGeoFile('../sld-ala/mv-lines.json'),
+    loadGeoFile('../sld-ala/lv-lines.json')
+  ]);
+  S.mv = r[0];
+  S.lv = r[1];
+  S.backbone = {};
   return S.mv;
 }
 
@@ -1140,7 +1161,118 @@ function nearestDevice(lat, lon, list){
     const d = dy*dy + dx*dx;
     if(d < bd){ bd = d; best = p; }
   }
-  return bd < 0.0004 ? best : null;   // ราว 2 กม. เป็นเพดานกันจับคู่ผิด
+  return bd < 0.0000025 ? best : null;   // ราว 170 เมตร กันจับคู่ข้ามไลน์
+}
+
+/* ---- หาแนวไลน์เมนอัตโนมัติจากโครงข่าย GIS + ตำแหน่งอุปกรณ์ต้นทาง ---- */
+const BACKBONE_TYPES = ['WB','WS','WR','YB'];
+
+function segKeyOf(feeder, i){ return feeder + '#' + i; }
+
+function nodeKey(c){ return c.lat.toFixed(5) + ',' + c.lon.toFixed(5); }
+
+function buildBackboneSet(feeder, segs, devs){
+  /* กราฟจากจุดหักของแนวสายจริง */
+  const adj = {};
+  const nodes = [];
+  const push = (a, b, si) => { (adj[a] = adj[a] || []).push({ to: b, si }); };
+  segs.forEach((item, si) => {
+    const v = item.v;
+    for(let i = 0; i < v.length - 1; i++){
+      const a = nodeKey(v[i]), b = nodeKey(v[i+1]);
+      push(a, b, si); push(b, a, si);
+    }
+    v.forEach(c => nodes.push({ k: nodeKey(c), lat: c.lat, lon: c.lon }));
+  });
+  if(!nodes.length) return new Set();
+
+  const snap = (lat, lng) => {
+    let best = null, bd = Infinity;
+    for(let i = 0; i < nodes.length; i++){
+      const dy = nodes[i].lat - lat, dx = (nodes[i].lon - lng) * 0.99;
+      const d = dy*dy + dx*dx;
+      if(d < bd){ bd = d; best = nodes[i]; }
+    }
+    return (best && bd < 0.0000081) ? best.k : null;   // ราว 300 เมตร
+  };
+
+  const back = devs.filter(d => BACKBONE_TYPES.indexOf(String(d.type||'').toUpperCase()) >= 0);
+  if(back.length < 2) return new Set();
+
+  /* ต้นทาง: อุปกรณ์ชนิด WB ถ้าไม่มีก็ตัวที่ไม่มีต้นทาง ถ้าไม่มีอีกก็ตัวแรก */
+  let root = back.find(d => String(d.type).toUpperCase() === 'WB')
+          || back.find(d => !d.parent)
+          || back[0];
+  const rootKey = snap(root.lat, root.lng);
+  if(!rootKey) return new Set();
+
+  /* เดินกว้างจากต้นทาง เก็บเส้นทางย้อนกลับ */
+  const prev = { [rootKey]: null };
+  const queue = [rootKey];
+  for(let qi = 0; qi < queue.length; qi++){
+    const cur = queue[qi];
+    (adj[cur] || []).forEach(e => {
+      if(prev[e.to] !== undefined) return;
+      prev[e.to] = { from: cur, si: e.si };
+      queue.push(e.to);
+    });
+  }
+
+  /* เส้นทางจากต้นทางไปยังอุปกรณ์ไลน์เมนทุกตัว = แนวไลน์เมน */
+  const mark = new Set();
+  back.forEach(d => {
+    const k = snap(d.lat, d.lng);
+    if(!k || prev[k] === undefined) return;
+    let cur = k, guard = 0;
+    while(prev[cur] && guard++ < 20000){
+      mark.add(prev[cur].si);
+      cur = prev[cur].from;
+    }
+  });
+  return mark;
+}
+
+/* ---- แก้เจ้าของช่วงสายด้วยมือ ---- */
+function fixSeg(segKey, feeder){
+  const sum = summarize();
+  const jobs = sum.jobs.filter(j => j.JobType !== 'เฉพาะคราว');
+  const cur = (S.data.linefix || []).find(x => String(x.SegKey) === segKey);
+  $('#modal').innerHTML = `
+  <div class="mask" onclick="if(event.target===this)closeSheet()">
+   <div class="sheet" style="width:min(520px,100%)">
+     <div class="sheethead">
+       <div style="flex:1"><div style="font-size:12px;color:#D6C6E4">ช่วงสาย ${esc(segKey)}</div>
+       <div class="kanit" style="font-size:18px;color:#fff">กำหนดผู้รับผิดชอบเส้นนี้</div></div>
+       <button onclick="closeSheet()" aria-label="ปิด">×</button>
+     </div>
+     <div style="padding:16px"><div class="card">
+       <div class="sub" style="margin-bottom:12px">ใช้เมื่อระบบเดาผิด ค่าที่กำหนดเองจะทับผลที่คำนวณให้ และคงอยู่ถาวร</div>
+       <div class="field" style="margin-bottom:14px">
+         <label for="fx">ใบงานที่รับผิดชอบ</label>
+         <select class="inp" id="fx" style="width:100%">
+           <option value="">— ใช้ค่าที่ระบบคำนวณ —</option>
+           ${jobs.map(j=>`<option value="${esc(j.JobID)}" ${cur&&cur.JobID===j.JobID?'selected':''}>${esc(j.MJMNo)} · ${esc(j.FeederID)} · ${esc(j.Contractor)||'ยังไม่ระบุ'}</option>`).join('')}
+         </select>
+       </div>
+       <button class="btn ok" style="width:100%" id="fxb" onclick="saveSegFix('${esc(segKey)}')">บันทึก</button>
+     </div></div>
+   </div>
+  </div>`;
+}
+
+async function saveSegFix(segKey){
+  const btn = $('#fxb'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  const jobId = $('#fx').value;
+  try{
+    await api('saveLineFix', { segKey, jobId });
+    S.data.linefix = (S.data.linefix || []).filter(x => String(x.SegKey) !== segKey);
+    if(jobId) S.data.linefix.push({ SegKey: segKey, JobID: jobId });
+    closeSheet(); toast('บันทึกแล้ว');
+    renderMap();
+  }catch(e){
+    toast(e.message);
+    btn.disabled = false; btn.textContent = 'บันทึก';
+  }
 }
 
 function ensureMap(){
@@ -1242,17 +1374,44 @@ async function renderMap(){
     (byFeederPts[f] = byFeederPts[f] || []).push(p);
   });
 
+  const feederMain = {};
+  sum.jobs.forEach(j => {
+    if(String(j.MonthGroup) === '1' || j.System === 'HV'){
+      const f = String(j.FeederID||'').toUpperCase();
+      if(f && !feederMain[f]) feederMain[f] = j.JobID;
+    }
+  });
+
   const useReal = mapFilter.geo === 'real' && S.mv && Object.keys(S.mv).length > 0;
 
   if(useReal){
     /* วาดตามแนวสายจริงจาก GIS ชุดเดียวกับระบบ SLD */
+    const fixBySeg = {};
+    (S.data.linefix || []).forEach(x => { fixBySeg[String(x.SegKey)] = String(x.JobID); });
+
     Object.keys(S.mv).forEach(f => {
       const list = byFeederPts[f] || [];
-      S.mv[f].forEach(item => {
+      if(!S.backbone) S.backbone = {};
+      if(!S.backbone[f]) S.backbone[f] = buildBackboneSet(f, S.mv[f], list);
+      const bb = S.backbone[f];
+
+      S.mv[f].forEach((item, si) => {
         const seg = item.v;
-        const mid = seg[Math.floor(seg.length / 2)];
-        const near = list.length ? nearestDevice(mid.lat, mid.lon, list) : null;
-        const job = near ? jobById[ownerOf(near)] : null;
+        const key = segKeyOf(f, si);
+        const isMain = bb.has(si);
+
+        let jid = fixBySeg[key] || '';
+        let how = jid ? 'กำหนดเอง' : '';
+        if(!jid && isMain){ jid = feederMain[f] || ''; how = 'ไลน์เมน'; }
+        if(!jid){
+          const mid = seg[Math.floor(seg.length / 2)];
+          const near = list.length ? nearestDevice(mid.lat, mid.lon, list) : null;
+          jid = near ? ownerOf(near) : '';
+          how = jid ? 'ไลน์แยก' : '';
+        }
+        if(!jid){ jid = feederMain[f] || ''; how = how || 'ฟีดเดอร์'; }
+
+        const job = jobById[jid];
         const ok = jobPasses(job);
         const color = colorFor(job, ok);
         if(ok) seg.forEach(c => seen(c.lon, c.lat));
@@ -1260,15 +1419,45 @@ async function renderMap(){
           map.Overlays.add(new longdo.Polyline(
             seg.map(c => ({ lon: c.lon, lat: c.lat })),
             { title: job ? `${esc(job.MJMNo)} · ${esc(f)}` : esc(f),
-              detail: job
+              detail: (job
                 ? `${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}`
-                : 'แนวสาย ' + esc(f),
-              lineWidth: ok ? (item.main ? 5 : 3) : 1.5, lineColor: color, clickable: true }
+                : 'แนวสาย ' + esc(f)) +
+                `<br><span style="color:#75716A">ที่มาของสี: ${esc(how)}</span>` +
+                `<br><a href="#" onclick="fixSeg('${esc(key)}','${esc(f)}');return false;">แก้ผู้รับผิดชอบเส้นนี้</a>`,
+              lineWidth: ok ? (isMain ? 5 : 3) : 1.5, lineColor: color, clickable: true }
           ));
           drawn++;
         }catch(e){}
       });
     });
+    /* แรงต่ำ — ใช้ใบงาน LV ของฟีดเดอร์นั้นเป็นเจ้าของ */
+    if(S.lv){
+      const lvJob = {};
+      sum.jobs.forEach(j => {
+        if(j.System !== 'LV') return;
+        const f = String(j.FeederID||'').toUpperCase();
+        if(f && !lvJob[f]) lvJob[f] = j;
+      });
+      Object.keys(S.lv).forEach(f => {
+        const job = lvJob[f] || null;
+        const ok = jobPasses(job);
+        const color = colorFor(job, ok);
+        S.lv[f].forEach(item => {
+          if(ok) item.v.forEach(c => seen(c.lon, c.lat));
+          try{
+            map.Overlays.add(new longdo.Polyline(
+              item.v.map(c => ({ lon: c.lon, lat: c.lat })),
+              { title: job ? `${esc(job.MJMNo)} · แรงต่ำ ${esc(f)}` : ('แรงต่ำ ' + esc(f)),
+                detail: job
+                  ? `${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}`
+                  : 'แนวสายแรงต่ำ ' + esc(f),
+                lineWidth: ok ? 2 : 1, lineColor: color, clickable: true }
+            ));
+            drawn++;
+          }catch(e){}
+        });
+      });
+    }
   }else{
     /* เส้นตรงระหว่างอุปกรณ์ตาม ParentID */
     pts.forEach(p => {
