@@ -2,7 +2,14 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- ตั้งค่าเดียวกับแอปอื่นในศูนย์รวมงาน — เวลาเพิ่มลงหน้าจอโฮม ไอโฟนจะเปิดเต็มจอ
+     ถ้าไม่มีบรรทัดเหล่านี้ ไอโฟนจะกันพื้นที่แถบสถานะด้านบนและขอบล่างไว้ กลายเป็นแถบขาว -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ตัดต้นไม้">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#4b2e83">
 <title>งานตัดต้นไม้ กฟส.อ่าวลึก</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
 <style>
@@ -22,7 +29,8 @@ a{color:var(--pea2);text-decoration:none}
 .hide{display:none !important}
 
 /* --- login --- */
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ground);
+  padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))}
 .loginbox{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
 .brandmark{width:44px;height:44px;border-radius:12px;background:var(--pea);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Kanit';font-size:16px}
@@ -48,7 +56,10 @@ a{color:var(--pea2);text-decoration:none}
 .tabs button{border:0;background:transparent;padding:14px 0;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--pea);font-weight:600;border-bottom-color:var(--pea)}
 #app{display:flex;flex-direction:column;min-height:100vh}
-main{flex:1;padding:20px}
+main{flex:1;padding:20px;background:var(--ground)}
+/* แผ่นสีขาวรองขอบล่างสุดของเครื่อง — กันแถบว่างใต้เมนูล่างบนไอโฟน
+   ถ้าโครงแอปปิดไม่ถึงขอบจอจริง ส่วนที่เหลือจะเป็นสีขาวกลืนกับเมนู ไม่เห็นเป็นแถบ */
+#safebottom{display:none}
 .grid{display:grid;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
 .kpi .n{font-family:'Kanit';font-size:30px;font-weight:600;line-height:1.2}
@@ -107,7 +118,8 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
      ไม่ใช้ 100vh เพราะบนมือถือ 100vh รวมพื้นที่ใต้แถบ URL ด้วย
      ทำให้หน้าสูงเกินจอ เลื่อนทั้งหน้าได้ และเหลือที่ว่างด้านล่าง */
   html,body{height:100%;overscroll-behavior:none}
-  #app{position:fixed;inset:0;min-height:0;overflow:hidden}
+  #app{position:fixed;inset:0;min-height:0;height:100dvh;overflow:hidden}
+  #safebottom{display:block;position:fixed;left:0;right:0;bottom:0;height:180px;background:#fff;z-index:-1}
   .topbar{position:static;flex-shrink:0;padding:8px 12px;gap:8px;
           padding-top:calc(8px + env(safe-area-inset-top))}
   /* แถบหัวบนมือถือแคบ — ย่อปุ่มและซ่อนคำว่า "25" ของปี เพื่อให้ชื่อแอปไม่ถูกตัด
@@ -121,7 +133,8 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
   .iconbtn.home{display:none}
   .tb-right{gap:6px}
   .tabs{display:none}
-  main{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 18px}
+  main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+       -webkit-overflow-scrolling:touch;padding:14px 14px 18px}
   .bottomnav{display:flex;flex-shrink:0;background:#fff;border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
   .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
   .bottomnav button.on{color:var(--pea);font-weight:600}
@@ -132,7 +145,10 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
   /* ตัวกรองแผนที่บนมือถือ — เรียงแถวเดียวแล้วเลื่อนซ้ายขวา
      แทนที่จะตกบรรทัดสี่แถวจนกินพื้นที่แผนที่ */
   .mapbar{gap:6px;padding-bottom:8px;flex-wrap:nowrap;flex-direction:column;align-items:stretch}
+  /* overscroll-behavior กันไม่ให้การเลื่อนแถวนี้ไปชนขอบจอ
+     แล้วไอโฟนเข้าใจผิดว่าเป็นการปัดย้อนกลับ (จะมีแถบเทาลูกศรโผล่มา) */
   .mapctl{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;
+          overscroll-behavior-x:contain;touch-action:pan-x;
           scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .mapctl::-webkit-scrollbar{display:none}
   .mapctl > *{flex-shrink:0}
@@ -207,6 +223,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 </div>
 
 <!-- ======= ตัวแอป ======= -->
+<div id="safebottom" aria-hidden="true"></div>
 <div id="app" class="hide">
   <div class="topbar">
     <div class="tb-left">
