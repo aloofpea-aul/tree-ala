@@ -222,6 +222,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-06e</div>
   </form>
 </div>
 
@@ -289,7 +290,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-06d';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-06e';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -769,9 +770,10 @@ function renderDash(){
       ${todoList(s)}
     </div>
   </div>
-  <div class="sub" style="text-align:center;margin:14px 0 2px;font-size:11px;opacity:.65">
-    รุ่นแอป ${BUILD} · ถ้าตัวเลขนี้ไม่ตรงกับที่แจ้งไว้ แปลว่าเครื่องยังใช้ไฟล์เก่าอยู่
+  <div class="sub" style="text-align:center;margin:14px 0 2px;font-size:11px;opacity:.7;line-height:1.7">
+    รุ่นแอป ${BUILD}<br><span id="diag">—</span>
   </div>`;
+  setTimeout(screenDiag, 60);
 }
 
 function todoList(s){
@@ -1809,6 +1811,34 @@ addEventListener('resize', fitShell);
 addEventListener('orientationchange', ()=>{ setTimeout(fitShell, 120); setTimeout(fitShell, 500); });
 addEventListener('pageshow', fitShell);
 if(window.visualViewport) window.visualViewport.addEventListener('resize', fitShell);
+
+/* อ่านค่าจริงจากเครื่อง ไว้ดูว่าทำไมขอบล่างไม่เต็ม */
+function safeInset(side){
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;left:-999px;top:0;width:1px;height:env(safe-area-inset-'+side+',0px)';
+  document.body.appendChild(d);
+  const h = d.getBoundingClientRect().height;
+  d.remove();
+  return Math.round(h);
+}
+function screenDiag(){
+  const e = document.getElementById('diag');
+  if(!e) return;
+  const vv = window.visualViewport;
+  const app = document.getElementById('app').getBoundingClientRect();
+  const nav = document.getElementById('bnav').getBoundingClientRect();
+  const standalone = (window.navigator.standalone === true) ||
+                     (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  e.textContent =
+    'จอ ' + screen.width + '×' + screen.height +
+    ' · inner ' + window.innerHeight +
+    ' · vv ' + (vv ? Math.round(vv.height) : '-') +
+    ' · โครง ' + Math.round(app.height) +
+    ' · ล่างเมนู ' + Math.round(nav.bottom) +
+    ' · inset ' + safeInset('top') + '/' + safeInset('bottom') +
+    ' · ' + (standalone ? 'โฮม' : 'เบราว์เซอร์');
+}
+addEventListener('resize', ()=>setTimeout(screenDiag, 80));
 
 /* กลับมาที่แท็บนี้เมื่อไร ให้เช็กว่ามีคนอื่นแก้ข้อมูลหรือยัง
    (ที่ กฟส.อ่าวลึก มีหลายคนแก้พร้อมกัน จึงต้องดึงของคนอื่นมาด้วย) */
