@@ -109,7 +109,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
 .field .inp{width:100%}
 /* ===== โหมดตรวจหน้าจอ เปิดด้วยการต่อท้าย URL ว่า ?diag=1 ===== */
-html.diag,html.diag body{background:#FF2D2D !important}
+html.diag,html.diag body{background:#FFFFFF !important}
 html.diag #app{outline:4px solid #00D900;outline-offset:-4px}
 html.diag .bottomnav{background:#FFF59D !important}
 #diagbox{display:none}
@@ -148,7 +148,8 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   .tabs{display:none}
   main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
        -webkit-overflow-scrolling:touch;padding:14px 14px 18px}
-  .bottomnav{display:flex;flex-shrink:0;background:#fff;border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+  .bottomnav{display:flex;flex-shrink:0;background:#fff;border-top:1px solid var(--line);
+              padding:8px 8px var(--navpad, calc(8px + env(safe-area-inset-bottom)))}
   .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
   .bottomnav button.on{color:var(--pea);font-weight:600}
   .bottomnav svg{display:block;margin:0 auto 3px}
@@ -232,7 +233,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11h</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11i</div>
   </form>
 </div>
 
@@ -301,7 +302,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11h';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11i';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -1841,11 +1842,7 @@ function shellHeight(){
   const vv = window.visualViewport;
   let base = window.innerHeight || 0;
   if(vv && vv.height > base) base = vv.height;
-  let h = base + (isStandalone() ? safeInset('top') : 0);
-  const cap = Math.max(screen.height || 0, screen.width || 0);   // ไม่ให้เกินจอจริง
-  if(cap && h > cap) h = cap;
-  if(h < base) h = base;
-  return Math.round(h);
+  return Math.round(base);
 }
 function fitShell(){
   const h = shellHeight();
@@ -1863,7 +1860,16 @@ function verifyShell(){
     document.documentElement.style.setProperty('--vh', Math.round(want - r.top) + 'px');
   }
 }
-function fitAll(){ fitShell(); setTimeout(verifyShell, 60); }
+/* ไอโฟนตอนเปิดจากหน้าจอโฮมวาดได้แค่ในกรอบ 797 ส่วนที่เหลือใต้กรอบอีก 47 px
+   วาดอะไรลงไปไม่ได้เลย (ทดสอบแล้ว ตั้งกล่องสูง 844 สีก็ยังหยุดที่ 797)
+   แต่ 47 px นั้นทำหน้าที่เป็นระยะปลอดภัยขอบล่างให้อยู่แล้ว มากกว่า 34 px ที่ต้องการ
+   จึงตัดระยะขอบล่างของเมนูออก ไอคอนจะขยับลงไปชิดขอบกรอบ ไม่ลอยสูงเหมือนเดิม */
+function fitNavPad(){
+  const root = document.documentElement;
+  if(isStandalone() && safeInset('top') > 0) root.style.setProperty('--navpad', '8px');
+  else root.style.removeProperty('--navpad');
+}
+function fitAll(){ fitShell(); fitNavPad(); setTimeout(verifyShell, 60); }
 
 fitShell();
 addEventListener('resize', fitAll);
