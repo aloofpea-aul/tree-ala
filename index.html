@@ -232,7 +232,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11f</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11g</div>
   </form>
 </div>
 
@@ -301,7 +301,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11f';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11g';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -557,6 +557,8 @@ async function startApp(){
   }
   $('#app').classList.remove('hide');
   splashOff();
+  setTimeout(fitAll, 50);
+  setTimeout(()=>{ fitAll(); diagBox(); }, 600);
 }
 
 async function loadYear(year, opts={}){
@@ -1812,15 +1814,37 @@ async function renderMap(){
    บนมือถือ 100vh นับรวมพื้นที่ใต้แถบ URL และบางเครื่อง 100dvh ก็ยังไม่ตรง
    จึงวัดจาก visualViewport ซึ่งคือ "พื้นที่ที่ตามองเห็นจริง" แล้วส่งเข้า CSS
    ผ่านตัวแปร --vh ทำให้โครงแอปสูงพอดีจอทุกเครื่อง ไม่เหลือแถบว่างด้านล่าง */
+/* วัดจากเครื่องจริงแล้วพบว่า บนไอโฟนที่เพิ่มลงหน้าจอโฮม
+   visualViewport.height จะหักพื้นที่แถบสถานะด้านบน (47 px) ออกไปด้วย
+   ทั้งที่หน้าเว็บวาดตั้งแต่ขอบบนจริง ๆ จึงเหลือที่ว่างด้านล่าง 47 px พอดี
+   ส่วน innerHeight ให้ค่าเต็มจอ 844 ถูกต้อง — จึงใช้ innerHeight เป็นหลัก */
 function fitShell(){
   const vv = window.visualViewport;
-  const h = Math.round(vv ? vv.height : window.innerHeight);
+  let h = window.innerHeight || 0;
+  if(vv && vv.height > h) h = vv.height;      // เผื่อบางเบราว์เซอร์ innerHeight ต่ำกว่าจริง
+  h = Math.round(h);
   if(h > 240) document.documentElement.style.setProperty('--vh', h + 'px');
 }
+
+/* ตรวจซ้ำหลังวาดจอจริง — ถ้าขอบล่างของโครงแอปยังไม่ถึงขอบจอ ให้ยืดให้พอดีเอง
+   เป็นตาข่ายกันพลาด เผื่อเครื่องรุ่นไหนรายงานความสูงไม่ตรงอีก */
+function verifyShell(){
+  const app = document.getElementById('app');
+  if(!app || app.classList.contains('hide')) return;
+  if(getComputedStyle(app).position !== 'fixed') return;     // จอคอมไม่ต้องยุ่ง
+  const r = app.getBoundingClientRect();
+  const want = window.innerHeight;
+  if(want > 240 && Math.abs(r.bottom - want) > 1){
+    document.documentElement.style.setProperty('--vh', Math.round(want - r.top) + 'px');
+  }
+}
+function fitAll(){ fitShell(); setTimeout(verifyShell, 60); }
+
 fitShell();
-addEventListener('resize', fitShell);
-addEventListener('orientationchange', ()=>{ setTimeout(fitShell, 120); setTimeout(fitShell, 500); });
-addEventListener('pageshow', fitShell);
+addEventListener('resize', fitAll);
+addEventListener('orientationchange', ()=>{ setTimeout(fitAll, 120); setTimeout(fitAll, 500); });
+addEventListener('pageshow', fitAll);
+addEventListener('load', ()=>setTimeout(fitAll, 150));
 if(window.visualViewport) window.visualViewport.addEventListener('resize', fitShell);
 
 /* เปิดโหมดตรวจเมื่อ URL มี ?diag=1 — ทาพื้นหลังหน้าเว็บเป็นสีแดง
