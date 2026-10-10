@@ -2,7 +2,6 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<script src="/pea-hub.js" data-app="tree" data-gate="off"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- ตั้งค่าเดียวกับแอปอื่นในศูนย์รวมงาน — เวลาเพิ่มลงหน้าจอโฮม ไอโฟนจะเปิดเต็มจอ
      ถ้าไม่มีบรรทัดเหล่านี้ ไอโฟนจะกันพื้นที่แถบสถานะด้านบนและขอบล่างไว้ กลายเป็นแถบขาว -->
@@ -109,6 +108,16 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .fieldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
 .field .inp{width:100%}
+/* ===== โหมดตรวจหน้าจอ เปิดด้วยการต่อท้าย URL ว่า ?diag=1 ===== */
+html.diag,html.diag body{background:#FF2D2D !important}
+html.diag #app{outline:4px solid #00D900;outline-offset:-4px}
+html.diag .bottomnav{background:#FFF59D !important}
+#diagbox{display:none}
+html.diag #diagbox{display:block;position:fixed;left:10px;right:10px;top:50%;transform:translateY(-50%);
+  background:rgba(0,0,0,.9);color:#fff;padding:16px;border-radius:14px;z-index:200;
+  font-size:15px;line-height:1.9;text-align:center;font-family:'IBM Plex Sans Thai',sans-serif}
+html.diag #diagbox b{font-size:17px;color:#FFE082}
+html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-top:10px;text-align:left}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2F2A34;color:#fff;padding:12px 20px;border-radius:12px;z-index:90;font-size:13px}
 .bottomnav{display:none}
 @media (max-width:760px){
@@ -223,7 +232,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-06e</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11f</div>
   </form>
 </div>
 
@@ -276,6 +285,7 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
   </div>
 </div>
 
+<div id="diagbox" aria-live="polite"></div>
 <div id="modal"></div>
 <div id="toast"></div>
 
@@ -291,7 +301,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-06e';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11f';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -1812,6 +1822,40 @@ addEventListener('resize', fitShell);
 addEventListener('orientationchange', ()=>{ setTimeout(fitShell, 120); setTimeout(fitShell, 500); });
 addEventListener('pageshow', fitShell);
 if(window.visualViewport) window.visualViewport.addEventListener('resize', fitShell);
+
+/* เปิดโหมดตรวจเมื่อ URL มี ?diag=1 — ทาพื้นหลังหน้าเว็บเป็นสีแดง
+   ถ้าแถบว่างด้านล่างกลายเป็นสีแดง แปลว่าแถบนั้นยังอยู่ในหน้าเว็บ
+   ถ้ายังเป็นสีขาว/ครีม แปลว่าอยู่นอกหน้าเว็บ ไอโฟนกันพื้นที่ไว้เอง */
+const DIAG = /[?&]diag=1/.test(location.search);
+if(DIAG) document.documentElement.classList.add('diag');
+
+function diagBox(){
+  if(!DIAG) return;
+  const e = document.getElementById('diagbox');
+  if(!e) return;
+  const vv = window.visualViewport;
+  const app = document.getElementById('app');
+  const ar = app ? app.getBoundingClientRect() : {height:0,bottom:0};
+  const nav = document.getElementById('bnav');
+  const nr = nav ? nav.getBoundingClientRect() : {bottom:0};
+  const standalone = (window.navigator.standalone === true) ||
+                     (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  e.innerHTML =
+    '<b>รุ่น ' + BUILD + '</b><br>' +
+    'จอเครื่อง ' + screen.width + ' × ' + screen.height + '<br>' +
+    'innerHeight ' + window.innerHeight + '<br>' +
+    'visualViewport ' + (vv ? Math.round(vv.height) : '-') + '<br>' +
+    'ความสูงโครงแอป ' + Math.round(ar.height) + '<br>' +
+    'ขอบล่างเมนู ' + Math.round(nr.bottom) + '<br>' +
+    'safe-area บน/ล่าง ' + safeInset('top') + ' / ' + safeInset('bottom') + '<br>' +
+    'เปิดจาก ' + (standalone ? 'หน้าจอโฮม' : 'เบราว์เซอร์') +
+    '<div class="note">แถบว่างข้างล่าง<br>• <b style="color:#FF8A80">แดง</b> = อยู่ในหน้าเว็บ แก้ที่ CSS ได้<br>' +
+    '• <b style="color:#FFF59D">เหลือง</b> = เมนูยืดถึงแล้ว<br>• <b>ขาว/ครีม</b> = อยู่นอกหน้าเว็บ ไอโฟนกันไว้เอง</div>';
+}
+addEventListener('resize', ()=>setTimeout(diagBox, 80));
+addEventListener('load', ()=>setTimeout(diagBox, 300));
+setTimeout(diagBox, 600);
+setTimeout(diagBox, 1800);
 
 /* อ่านค่าจริงจากเครื่อง ไว้ดูว่าทำไมขอบล่างไม่เต็ม */
 function safeInset(side){
