@@ -151,6 +151,22 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .tipdots{display:flex;gap:4px;margin-top:9px}
 .tipdots i{width:5px;height:5px;border-radius:99px;background:#D9C58E;display:block;transition:width .2s}
 .tipdots i.on{background:#8A6512;width:14px}
+.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.pthumb{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#E3E0D8}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumb b{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:9.5px;
+  padding:1px 5px;border-radius:5px;font-weight:600}
+.pthumb .px{position:absolute;right:3px;top:3px;width:20px;height:20px;border:0;border-radius:999px;
+  background:rgba(0,0,0,.55);color:#fff;font-size:13px;line-height:1;cursor:pointer}
+.padd{aspect-ratio:1;border:2px dashed #C6C1B6;border-radius:10px;background:#FAF9F6;color:var(--pea);
+  font-size:22px;cursor:pointer;font-family:inherit}
+.plabel{font-size:12px;color:var(--dim);font-weight:600;margin-bottom:7px}
+.bmask{align-items:flex-end;justify-content:center}
+.bsheet{width:min(560px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom));
+  max-height:86%;overflow:auto;-webkit-overflow-scrolling:touch;box-shadow:0 -4px 16px rgba(0,0,0,.16)}
+.bgrip{width:38px;height:4px;background:#DDD9CF;border-radius:9px;margin:0 auto 12px}
+.blockbox{background:#FBF0E9;border:1px solid #EFD3C6;border-radius:12px;padding:12px;margin-bottom:12px}
+.blockbox .row{border-top-color:#EFD3C6}
 .tick{width:30px;height:30px;flex-shrink:0;border-radius:9px;border:2px solid #D9D5CC;background:#fff;
   color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .tick.on{background:var(--ok);border-color:var(--ok)}
@@ -285,7 +301,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11t</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11x</div>
   </form>
 </div>
 
@@ -360,7 +376,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11t';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11x';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -898,6 +914,207 @@ function renderCheck(){
 }
 
 /* ============================================================
+   รูปหน้างานแบบไม่จำกัดจำนวน
+   ถ่ายกี่รูปก็ได้ แยกก่อนตัด-หลังตัด ติดพิกัดและเวลาอัตโนมัติ
+   ============================================================ */
+let photoCtx = null, photoBusy = false;
+
+function photosOf(f){
+  return (S.data.photos||[]).filter(ph =>
+    (!f.jobId    || ph.JobID === f.jobId) &&
+    (!f.roundNo  || String(ph.RoundNo) === String(f.roundNo)) &&
+    (!f.lineCode || normTxt(ph.LineCode) === normTxt(f.lineCode)) &&
+    (!f.findId   || ph.FindID === f.findId)
+  );
+}
+function canOverride(){
+  const r = String(S.user && (S.user.role||'') || '').toLowerCase();
+  return r.indexOf('admin')>=0 || r.indexOf('ผู้จัดการ')>=0 || r.indexOf('หัวหน้า')>=0
+      || r.indexOf('manager')>=0 || r.indexOf('หน.')>=0;
+}
+
+/* ย่อรูปก่อนส่ง ลดเวลารอและพื้นที่เก็บ */
+function here(){
+  return new Promise(res => {
+    if(!navigator.geolocation) return res({});
+    navigator.geolocation.getCurrentPosition(
+      p => res({lat: p.coords.latitude.toFixed(6), lng: p.coords.longitude.toFixed(6)}),
+      () => res({}), {enableHighAccuracy:true, timeout:6000, maximumAge:30000});
+  });
+}
+
+function pickPhotos(kind){
+  if(photoBusy){ toast('กำลังส่งรูปอยู่ รอสักครู่'); return; }
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.capture = 'environment';
+  inp.onchange = () => uploadPhotos([...inp.files], kind);
+  inp.click();
+}
+
+async function uploadPhotos(files, kind){
+  if(!files.length || !photoCtx) return;
+  photoBusy = true;
+  const pos = await here();
+  let okN = 0;
+  for(let i = 0; i < files.length; i++){
+    toast('กำลังส่งรูป ' + (i+1) + '/' + files.length + '…', 4000);
+    try{
+      const b64 = await shrinkImage(files[i]);
+      const out = await api('addPhoto', Object.assign({}, photoCtx, {
+        kind, photoBase64: b64, lat: pos.lat || '', lng: pos.lng || ''
+      }));
+      if(out.photo){ (S.data.photos = S.data.photos || []).push(out.photo); okN++; }
+      if(typeof refreshPhotoUI === 'function') refreshPhotoUI();
+    }catch(e){ toast(e.message, 4000); break; }
+  }
+  photoBusy = false;
+  toast('ส่งรูปแล้ว ' + okN + ' รูป');
+}
+
+async function delPhoto(photoId){
+  try{
+    await api('delPhoto', {photoId});
+    S.data.photos = (S.data.photos||[]).filter(x => x.PhotoID !== photoId);
+    refreshPhotoUI();
+    toast('ลบรูปแล้ว');
+  }catch(e){ toast(e.message, 4000); }
+}
+
+function photoGrid(list, kind, allowAdd){
+  return `<div class="pgrid">
+    ${list.map(ph => `
+      <div class="pthumb">
+        <img src="${esc(ph.Url)}" alt="รูป${esc(kind)}" loading="lazy">
+        <b>${esc(String(ph.At||'').slice(11,16))}</b>
+        <button type="button" class="px" aria-label="ลบรูป" onclick="delPhoto('${esc(ph.PhotoID)}')">×</button>
+      </div>`).join('')}
+    ${allowAdd ? `<button type="button" class="padd" onclick="pickPhotos('${kind}')" aria-label="เพิ่มรูป${kind}">+</button>` : ''}
+  </div>`;
+}
+
+let refreshPhotoUI = function(){};
+
+/* กล่องรูปสำหรับใช้ซ้ำในหลายหน้า */
+function photoBox(ctx, title){
+  photoCtx = ctx;
+  const before = photosOf(Object.assign({}, ctx)).filter(x => String(x.Kind).indexOf('ก่อน')>=0);
+  const after  = photosOf(Object.assign({}, ctx)).filter(x => String(x.Kind).indexOf('หลัง')>=0);
+  return `
+  <div class="card" id="photoCard">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+      <h3 style="font-size:16px;flex:1">${esc(title||'รูปหน้างาน')}</h3>
+      <span class="pill p-gray">${before.length + after.length} รูป</span>
+    </div>
+    <div class="sub" style="margin-bottom:10px">ถ่ายกี่รูปก็ได้ ทุกรูปติดพิกัด เวลา และชื่อผู้บันทึกอัตโนมัติ</div>
+    <div class="plabel">ก่อนตัด · ${before.length} รูป</div>
+    ${photoGrid(before, 'ก่อน', true)}
+    <div class="plabel" style="margin-top:12px">หลังตัด · ${after.length} รูป</div>
+    ${photoGrid(after, 'หลัง', true)}
+  </div>`;
+}
+
+/* ============================================================
+   กดพิกัดบนแผนที่ แล้วดูข้อมูลทั้งหมดของพื้นที่นั้น
+   ============================================================ */
+function nextRoundInfo(job, line){
+  for(let no = 1; no <= 3; no++){
+    if(String(line['R'+no+'Date']||'').trim() !== '') continue;
+    const dl = roundDeadline(job, no);
+    const month = planMonthOf(job, no);
+    if(!dl) return {no, month, days: null};
+    const days = Math.ceil((dl - new Date()) / 86400000);
+    return {no, month, days};
+  }
+  return null;
+}
+
+function openLineInfo(lineCode){
+  const d = S.data;
+  const line = (d.lines||[]).find(l => normTxt(l.LineCode) === normTxt(lineCode));
+  if(!line){ toast('ไม่พบไลน์ ' + lineCode + ' ในแผนปี ' + S.year); return; }
+  const job = d.jobs.find(j => j.JobID === line.JobID) || {};
+  const dev = (S.sld||[]).find(p => normTxt(p.id) === normTxt(lineCode));
+  const nx = nextRoundInfo(job, line);
+  const finds = (d.findings||[]).filter(f =>
+    normTxt(f.DeviceID) === normTxt(lineCode) && String(f.Status||'').indexOf('ปรับปรุงแล้ว') < 0);
+  const ph = photosOf({lineCode});
+  const pb = ph.filter(x => String(x.Kind).indexOf('ก่อน')>=0).length;
+  const pa = ph.length - pb;
+
+  const cell = (no) => {
+    const dt = line['R'+no+'Date'];
+    const done = String(dt||'').trim() !== '';
+    return `<div style="flex:1;border-radius:10px;padding:9px;text-align:center;
+      ${done ? 'background:var(--ok-soft)' : 'background:var(--warn-soft);border:1px solid #E8D6A8'}">
+      <div style="font-size:11px;color:${done?'#245F42':'#7A5A10'}">รอบ ${no}</div>
+      <div style="font-size:13px;font-weight:700;color:${done?'#245F42':'#7A5A10'}">
+        ${done ? esc(dateShow(dt).slice(5).replace('-','/')) : esc(planMonthOf(job,no)||'-')}</div>
+    </div>`;
+  };
+
+  $('#modal').innerHTML = `
+  <div class="mask bmask" onclick="if(event.target===this)closeSheet()">
+    <div class="bsheet">
+      <div class="bgrip"></div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div class="kanit" style="font-size:17px">${esc(line.LineCode)} · ${esc(line.PlaceName||'')}</div>
+          <div class="sub">${esc(job.FeederID||'')}${dev&&dev.type?' · '+esc(dev.type):''}${
+            dev&&num(dev.impact)?' · กระทบ '+fmt0(dev.impact)+' ราย':''}</div>
+        </div>
+        ${job.Contractor ? `<span class="pill" style="background:${contractorColor(job.Contractor)}1A;color:${contractorColor(job.Contractor)}">${esc(job.Contractor)}</span>` : ''}
+      </div>
+
+      <div style="display:flex;gap:7px;margin-top:12px">${cell(1)}${cell(2)}${cell(3)}</div>
+
+      ${nx ? `<div style="background:#FBF4E4;border:1px solid #EAD9AE;border-radius:10px;padding:10px;margin-top:9px;
+        font-size:13px;color:#6B5210;font-weight:600;text-align:center">
+        ${nx.days === null ? 'รอบถัดไป รอบที่ ' + nx.no + ' · ' + esc(nx.month)
+          : (nx.days > 0 ? 'ถึงรอบตัดถัดไปอีก ' + nx.days + ' วัน · ' + esc(nx.month)
+                         : 'เลยกำหนดรอบที่ ' + nx.no + ' มาแล้ว ' + Math.abs(nx.days) + ' วัน')}
+      </div>` : `<div style="background:var(--ok-soft);border-radius:10px;padding:10px;margin-top:9px;
+        font-size:13px;color:#245F42;font-weight:600;text-align:center">ตัดครบทั้ง 3 รอบแล้วในปีนี้</div>`}
+
+      <div class="row" style="border-top:1px solid var(--line2);margin-top:6px">
+        <div class="ic-n">ใบ</div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(job.MJMNo||'-')} · กลุ่ม ${esc(line.GroupNo||'-')} · แผนที่ ${esc(line.PlanNo||'-')}</div>
+        <div class="sub">ผู้ควบคุมงาน ${esc(job.Supervisor||'-')} · ${fmt(job.PlanKm)} กม.</div></div>
+      </div>
+      <div class="row">
+        <div class="ic-n" style="${finds.length?'background:var(--bad-soft);color:#8A2E20':''}">!</div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">${finds.length ? 'จุดที่พบค้างอยู่ ' + finds.length + ' จุด' : 'ไม่มีจุดที่พบค้างอยู่'}</div>
+        <div class="sub">${esc(finds.slice(0,2).map(f=>f.TreeType||f.Severity).join(' · ')) || 'เรียบร้อย'}</div></div>
+      </div>
+      <div class="row">
+        <div class="ic-n">รูป</div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">รูปในไลน์นี้ ${ph.length} รูป</div>
+        <div class="sub">ก่อนตัด ${pb} · หลังตัด ${pa}</div></div>
+      </div>
+
+      <div style="display:flex;gap:7px;margin-top:12px">
+        <button class="btn" style="flex:1;height:42px" onclick="openLinePhotos('${esc(line.LineCode)}')">ถ่ายรูปเพิ่ม</button>
+        <button class="btn ghost" style="flex:1;height:42px" onclick="closeSheet();openFinding('${esc(job.JobID)}')">บันทึกจุดที่พบ</button>
+        ${dev ? `<a class="btn ghost" style="width:52px;height:42px;text-decoration:none"
+          href="https://www.google.com/maps/dir/?api=1&destination=${dev.lat},${dev.lng}" target="_blank" rel="noopener">นำทาง</a>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function openLinePhotos(lineCode){
+  const line = (S.data.lines||[]).find(l => normTxt(l.LineCode) === normTxt(lineCode)) || {};
+  const job  = S.data.jobs.find(j => j.JobID === line.JobID) || {};
+  const nx   = nextRoundInfo(job, line);
+  const ctx  = {jobId: line.JobID || '', roundNo: nx ? nx.no : 3, lineCode, deviceId: lineCode};
+  openSheet(lineCode + ' · ' + (line.PlaceName||''), 'รูปหน้างาน', photoBox(ctx, 'รูปหน้างานของไลน์นี้'));
+  refreshPhotoUI = () => {
+    const c = document.getElementById('photoCard');
+    if(c) c.outerHTML = photoBox(ctx, 'รูปหน้างานของไลน์นี้');
+  };
+}
+
+/* ============================================================
    ข้อ 3 — ใบตรวจรับงาน
    รวบรวมไลน์แยกของใบงานในรอบนั้น ติ๊กว่าตัดแล้วได้ทีละเส้น
    นับความครบถ้วน แล้วกดยืนยันตรวจรับทีเดียว พิมพ์เป็นเอกสารได้
@@ -953,10 +1170,31 @@ function acceptData(jobId, no){
   return {job, round, lines, cut, finds, photoB, photoA, last, no};
 }
 
+/* เงื่อนไขที่ทำให้ยังตรวจรับไม่ได้ — ต้องตรงกับฝั่งเซิร์ฟเวอร์ */
+function acceptBlockers(jobId, no){
+  const d = S.data;
+  const lines = (d.lines||[]).filter(l => l.JobID === jobId);
+  const notCut = lines.filter(l => String(l['R'+no+'Date']||'').trim() === '');
+  const finds = (d.findings||[]).filter(f => f.JobID === jobId &&
+                  String(f.Status||'').indexOf('ปรับปรุงแล้ว') < 0);
+  const out = [];
+  if(notCut.length) out.push({key:'cut', n:notCut.length,
+    text:'ไลน์ยังตัดไม่ครบ ' + notCut.length + ' เส้น',
+    detail: notCut.slice(0,5).map(l=>l.LineCode).join(', ') + (notCut.length>5?' และอีก '+(notCut.length-5):''),
+    go:'cut'});
+  if(finds.length) out.push({key:'find', n:finds.length,
+    text:'จุดที่พบยังไม่ปรับปรุง ' + finds.length + ' จุด',
+    detail: finds.slice(0,3).map(f=>(f.DeviceID||'หมุดอิสระ')+' '+(f.TreeType||'')).join(' · '),
+    go:'find'});
+  return out;
+}
+
 function openAccept(jobId, no){
   const a = acceptData(jobId, no);
   const pct = a.lines.length ? Math.round(a.cut.length / a.lines.length * 100) : 0;
   const done = String(a.round.AcceptDate||'').trim() !== '';
+  const blk = acceptBlockers(jobId, no);
+  refreshPhotoUI = () => openAccept(jobId, no);
 
   const tile = (lbl, val, sub, tone) => `
     <div style="flex:1;min-width:0;background:${tone||'#FAF9F6'};border:1px solid var(--line);border-radius:12px;padding:11px">
@@ -1035,14 +1273,58 @@ function openAccept(jobId, no){
         <div class="field" style="margin-top:10px"><label>หมายเหตุ</label>
           <input class="inp" style="width:100%" type="text" id="acNote" value="${esc(a.round.Note||'')}"
             placeholder="เช่น เหลือ 2 เส้นติดสวนยาง นัดเข้าใหม่สัปดาห์หน้า"></div>
-        ${pct < 100 ? `<div class="sub" style="margin-top:10px;color:#8A5A10">
-          ยังตัดไม่ครบ ${a.lines.length - a.cut.length} เส้น — ยืนยันตรวจรับได้ แต่ควรระบุเหตุผลในหมายเหตุ</div>` : ''}
+        ${blk.length ? `
+        <div class="blockbox noprint" style="margin-top:12px;margin-bottom:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A2E20" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            <div style="font-weight:600;font-size:14px;color:#8A2E20">ยังตรวจรับไม่ได้ · ติด ${blk.length} ข้อ</div>
+          </div>
+          ${blk.map((b,i)=>`
+            <div class="row">
+              <div class="ic-n" style="background:#F2D9CE;color:#8A2E20">${i+1}</div>
+              <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(b.text)}</div>
+              <div class="sub">${esc(b.detail||'')}</div></div>
+            </div>`).join('')}
+        </div>` : ''}
         <div style="display:flex;gap:8px;margin-top:14px" class="noprint">
           <button class="btn ghost" style="height:42px;flex:1" onclick="printAccept()">พิมพ์ใบตรวจรับ</button>
-          <button class="btn ok" style="height:42px;flex:1" id="acBtn"
-            onclick="confirmAccept('${esc(jobId)}',${no})">${done?'บันทึกการแก้ไข':'ยืนยันตรวจรับ'}</button>
+          ${blk.length
+            ? `<button class="btn" style="height:42px;flex:1;background:#DAD6CE;color:#8A857C" disabled>ยืนยันตรวจรับ</button>`
+            : `<button class="btn ok" style="height:42px;flex:1" id="acBtn"
+                 onclick="confirmAccept('${esc(jobId)}',${no})">${done?'บันทึกการแก้ไข':'ยืนยันตรวจรับ'}</button>`}
         </div>
+        ${blk.length ? (canOverride()
+          ? `<button class="btn ghost noprint" style="height:40px;width:100%;margin-top:8px;color:var(--pea)"
+               onclick="askOverride('${esc(jobId)}',${no})">ขอยกเว้นและตรวจรับ</button>
+             <div class="sub noprint" style="margin-top:6px;text-align:center">
+               สำหรับผู้จัดการและหัวหน้าแผนก ต้องระบุเหตุผล ระบบบันทึกชื่อและเวลาไว้</div>`
+          : `<div class="sub noprint" style="margin-top:8px;text-align:center">
+               ถ้าจำเป็นต้องตรวจรับทั้งที่ยังไม่ครบ ให้ผู้จัดการหรือหัวหน้าแผนกเป็นผู้กดยกเว้น</div>`) : ''}
+        ${a.round.OverrideBy ? `<div style="margin-top:12px;background:var(--pea-soft);border-radius:10px;padding:11px;font-size:12.5px;color:#3E1A54;line-height:1.65">
+          <b>ตรวจรับโดยการยกเว้น</b><br>${esc(a.round.OverrideBy)} · ${esc(a.round.OverrideAt||'')}<br>เหตุผล: ${esc(a.round.OverrideReason||'')}</div>` : ''}
       </div>
+
+      ${photoBox({jobId, roundNo:no}, 'รูปงานรอบที่ ' + no)}
+
+      ${a.finds.length ? `
+      <div class="card" style="margin-bottom:12px">
+        <h3 style="font-size:16px;margin-bottom:4px">จุดที่พบในใบงานนี้ (${a.finds.length})</h3>
+        <div class="sub" style="margin-bottom:6px">ต้องปรับปรุงให้ครบก่อนจึงจะตรวจรับได้ ติ๊กเมื่อแก้เสร็จและถ่ายรูปหลังแล้ว</div>
+        ${a.finds.map(f => {
+          const fixed = String(f.Status||'').indexOf('ปรับปรุงแล้ว') >= 0;
+          const fp = photosOf({findId: f.FindID});
+          return `<div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line2)">
+            <button type="button" class="tick noprint ${fixed?'on':''}" aria-label="สลับสถานะปรับปรุง"
+              onclick="toggleFix('${esc(f.FindID)}',${fixed?'false':'true'},'${esc(jobId)}',${no})">${fixed?'&#10003;':''}</button>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600">${esc(f.DeviceID||'หมุดอิสระ')} · ${esc(f.TreeType||'')}</div>
+              <div class="sub">${esc(f.Severity||'')} · รูปคู่ก่อน-หลัง ${fp.filter(x=>String(x.Kind).indexOf('ก่อน')>=0).length}/${fp.filter(x=>String(x.Kind).indexOf('หลัง')>=0).length}</div>
+            </div>
+            <button class="btn ghost noprint" style="height:34px;padding:0 10px;font-size:12px;flex-shrink:0"
+              onclick="openFindPhotos('${esc(f.FindID)}','${esc(jobId)}',${no})">รูป</button>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
 
       <div class="card">
         <h3 style="font-size:16px;margin-bottom:4px">ทำต่อในระบบของ กฟภ.</h3>
@@ -1075,6 +1357,46 @@ function openAccept(jobId, no){
   </div>`;
 }
 
+async function toggleFix(findId, on, jobId, no){
+  const f = (S.data.findings||[]).find(x => x.FindID === findId);
+  if(!f) return;
+  const fields = { Status: on ? 'ปรับปรุงแล้ว' : 'รอปรับปรุง', FixedDate: on ? todayStore() : '' };
+  Object.assign(f, fields);
+  openAccept(jobId, no);
+  try{ await api('fixFinding', {findId, fields}); }
+  catch(e){ toast(e.message, 4000); }
+}
+
+function openFindPhotos(findId, jobId, no){
+  const f = (S.data.findings||[]).find(x => x.FindID === findId) || {};
+  const ctx = {jobId, roundNo:no, findId, deviceId: f.DeviceID||'', lineCode: f.DeviceID||''};
+  openSheet(f.DeviceID || 'จุดที่พบ', 'รูปคู่ก่อน-หลังของจุดนี้', photoBox(ctx, 'รูปจุดที่พบ'));
+  refreshPhotoUI = () => {
+    const c = document.getElementById('photoCard');
+    if(c) c.outerHTML = photoBox(ctx, 'รูปจุดที่พบ');
+  };
+}
+
+function askOverride(jobId, no){
+  const blk = acceptBlockers(jobId, no);
+  openSheet('ขอยกเว้นและตรวจรับ', 'ต้องระบุเหตุผล ระบบบันทึกชื่อและเวลาไว้', `
+    <div class="blockbox">
+      <div style="font-weight:600;font-size:13.5px;color:#8A2E20;margin-bottom:2px">สิ่งที่ยังไม่ครบ</div>
+      ${blk.map(b=>`<div class="sub" style="color:#8A2E20">· ${esc(b.text)}</div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="field"><label>เหตุผลที่ต้องยกเว้น</label>
+        <input class="inp" style="width:100%" id="ovReason" type="text"
+          placeholder="เช่น เจ้าของที่ไม่อนุญาตให้เข้า 3 เส้น นัดเข้าใหม่รอบหน้า"></div>
+      <div class="sub" style="margin-top:10px;line-height:1.65">
+        ผู้ยกเว้น ${esc(S.user?S.user.name:'')} · ${esc(todayStore())}<br>
+        ข้อความนี้จะปรากฏในใบตรวจรับและบันทึกลงชีตถาวร
+      </div>
+      <button class="btn ok" style="height:42px;width:100%;margin-top:14px" id="ovBtn"
+        onclick="confirmAccept('${esc(jobId)}',${no},true)">ยืนยันตรวจรับโดยยกเว้น</button>
+    </div>`);
+}
+
 async function acceptTick(lineId, no, on){
   const l = (S.data.lines||[]).find(x => x.LineID === lineId);
   if(!l) return;
@@ -1101,25 +1423,35 @@ async function acceptTickAll(jobId, no){
   toast('บันทึกแล้ว');
 }
 
-async function confirmAccept(jobId, no){
-  const btn = $('#acBtn'); if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+async function confirmAccept(jobId, no, override){
+  const btn = $(override ? '#ovBtn' : '#acBtn');
+  let reason = '';
+  if(override){
+    reason = ($('#ovReason') && $('#ovReason').value || '').trim();
+    if(!reason){ toast('กรุณาระบุเหตุผล'); return; }
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
   const r = (S.data.rounds||[]).find(x => x.JobID === jobId && num(x.RoundNo) === no);
   if(!r){ toast('ไม่พบรอบนี้'); return; }
+  /* หน้าขอยกเว้นเป็นคนละแผ่นกับใบตรวจรับ ช่องกรอกจึงอาจไม่มี ให้ใช้ค่าเริ่มต้นแทน */
+  const val = (sel, dflt) => { const e = $(sel); return e ? e.value : dflt; };
   const fields = {
-    AcceptDate: dateForStore($('#acDate').value),
-    Inspector:  $('#acBy').value,
-    Note:       $('#acNote').value,
+    AcceptDate: dateForStore(val('#acDate', todayStore())),
+    Inspector:  val('#acBy', S.user ? S.user.name : ''),
+    Note:       val('#acNote', r.Note || ''),
     Status:     'ตรวจรับแล้ว'
   };
   try{
-    await api('saveRound', {roundId: r.RoundID, fields});
+    const out = await api('saveRound', Object.assign({roundId: r.RoundID, fields},
+                      override ? {overrideReason: reason} : {}));
     Object.assign(r, fields);
-    toast('ยืนยันตรวจรับเรียบร้อย');
+    if(override) Object.assign(r, {OverrideBy: S.user?S.user.name:'', OverrideReason: reason, OverrideAt: todayStore()});
+    toast(override ? 'ตรวจรับโดยการยกเว้นเรียบร้อย' : 'ยืนยันตรวจรับเรียบร้อย');
     closeSheet();
     render();
   }catch(e){
     toast(e.message);
-    if(btn){ btn.disabled = false; btn.textContent = 'ยืนยันตรวจรับ'; }
+    if(btn){ btn.disabled = false; btn.textContent = override ? 'ยืนยันตรวจรับโดยยกเว้น' : 'ยืนยันตรวจรับ'; }
   }
 }
 
@@ -1661,6 +1993,7 @@ function renderPay(){
         <tbody>
         ${rows.map(p => {
           const j = jmap[p.JobID] || {};
+          const lk = payLock(p, j);
           return `<tr>
             <td data-l="เลขใบงาน" style="font-weight:600">${esc(j.MJMNo||'')}</td>
             <td data-l="ชื่องาน">${esc(j.JobName||'')}</td>
@@ -1669,13 +2002,29 @@ function renderPay(){
             <td data-l="%" class="n">${esc(p.Percent)}</td>
             <td data-l="จำนวนเงิน" class="n">${fmt0(p.Amount)}</td>
             <td data-l="สถานะ">${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0
-              ? '<span class="pill p-ok">เบิกจ่ายแล้ว</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>'}</td>
-            <td><button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button></td>
+              ? '<span class="pill p-ok">เบิกจ่ายแล้ว</span>'
+              : (lk ? '<span class="pill p-bad">ล็อกอยู่</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>')}</td>
+            <td>${lk
+              ? `<div class="sub" style="max-width:220px">${esc(lk)}</div>`
+              : `<button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button>`}</td>
           </tr>`;
         }).join('')}
         </tbody>
       </table>
     </div>`;
+}
+
+/* งวดเงินเบิกไม่ได้จนกว่ารอบที่ตรงกันจะตรวจรับผ่าน */
+function payLock(pay, job){
+  if(String(pay.Status||'').indexOf('เบิกจ่ายแล้ว') >= 0) return '';
+  if(job.JobType !== 'รายปี') return '';
+  const no = num(pay.Installment);
+  if(!no) return '';
+  const r = (S.data.rounds||[]).find(x => x.JobID === pay.JobID && num(x.RoundNo) === no);
+  if(r && String(r.AcceptDate||'').trim() !== '') return '';
+  const blk = acceptBlockers(pay.JobID, no);
+  if(blk.length) return 'รอบที่ ' + no + ' ยังตรวจรับไม่ได้ — ' + blk.map(b=>b.text).join(' · ');
+  return 'รอบที่ ' + no + ' ยังไม่ได้ตรวจรับ';
 }
 
 async function togglePay(payId, btn){
@@ -2465,6 +2814,7 @@ async function renderMap(){
                 ? `${esc(job.JobName||'')}<br>ผู้รับจ้าง: ${esc(job.Contractor)||'ยังไม่ระบุ'}<br>แผนเดือน: ${esc(job.PlanMonths)||'-'}`
                 : 'แนวสาย ' + esc(f)) +
                 `<br><span style="color:#75716A">ที่มาของสี: ${esc(how)}</span>` +
+                (job ? `<br><a href="#" onclick="openJob('${esc(job.JobID)}');return false;"><b>เปิดใบงานนี้</b></a>` : '') +
                 `<br><a href="#" onclick="fixSeg('${esc(key)}','${esc(f)}');return false;">แก้ผู้รับผิดชอบเส้นนี้</a>`,
               lineWidth: ok ? (isMain ? 5 : 3) : 1.5, lineColor: color, clickable: true }
           ));
@@ -2537,7 +2887,8 @@ async function renderMap(){
       map.Overlays.add(new longdo.Marker({ lon: p.lng, lat: p.lat }, {
         title: p.id,
         detail: `${esc(p.desc||'')}<br>${esc(f)} · ${esc(p.type||'')}` +
-                (job ? `<br>${esc(job.MJMNo)} · ${esc(job.Contractor)||'ยังไม่ระบุ'}` : ''),
+                (job ? `<br>${esc(job.MJMNo)} · ${esc(job.Contractor)||'ยังไม่ระบุ'}` : '') +
+                `<br><a href="#" onclick="openLineInfo('${esc(p.id)}');return false;"><b>ดูข้อมูลจุดนี้ทั้งหมด</b></a>`,
         icon: { html: `<div style="width:11px;height:11px;border-radius:99px;background:${color};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>`,
                 offset: { x: 5, y: 5 } }
       }));
