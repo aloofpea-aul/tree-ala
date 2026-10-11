@@ -150,6 +150,12 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .tipdots{display:flex;gap:4px;margin-top:9px}
 .tipdots i{width:5px;height:5px;border-radius:99px;background:#D9C58E;display:block;transition:width .2s}
 .tipdots i.on{background:#8A6512;width:14px}
+.findgrp{font-size:12px;color:var(--dim);font-weight:600;margin:16px 0 8px 2px}
+.findgrp:first-child{margin-top:4px}
+.findcard{margin-bottom:10px}
+.findcard.click{cursor:pointer}
+.qchip{border:1px solid #DDD9CF;background:#fff;border-radius:999px;padding:7px 13px;font-size:12.5px;
+  font-family:inherit;color:var(--pea);cursor:pointer}
 .ic-n{width:24px;height:24px;border-radius:999px;flex-shrink:0;display:flex;align-items:center;
   justify-content:center;font-size:12px;font-weight:600;background:var(--pea-soft);color:var(--pea)}
 .cv{flex-shrink:0}
@@ -268,7 +274,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11m</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11n</div>
   </form>
 </div>
 
@@ -298,6 +304,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 
   <div class="tabs" id="tabs">
     <button data-v="dash" class="on">แดชบอร์ด</button>
+    <button data-v="find">ค้นหา</button>
     <button data-v="map">แผนที่</button>
     <button data-v="jobs">ใบงาน</button>
     <button data-v="pay">งวดเงิน</button>
@@ -309,12 +316,14 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
       <div id="mapBar" class="mapbar"></div>
       <div id="map"></div>
     </div>
+    <div id="v-find" class="hide"></div>
     <div id="v-jobs" class="hide"></div>
     <div id="v-pay" class="hide"></div>
   </main>
 
   <div class="bottomnav" id="bnav">
     <button data-v="dash" class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/></svg>สรุป</button>
+    <button data-v="find"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>ค้นหา</button>
     <button data-v="map"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2Z"/><path d="M9 5v12"/><path d="M15 7v12"/></svg>แผนที่</button>
     <button data-v="jobs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>ใบงาน</button>
     <button data-v="pay"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>งวดเงิน</button>
@@ -337,7 +346,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11m';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11n';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -744,8 +753,9 @@ function sysPill(sys){
 function render(){
   document.querySelectorAll('#tabs button, #bnav button').forEach(b =>
     b.classList.toggle('on', b.dataset.v === S.view));
-  ['dash','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
+  ['dash','find','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
   if(S.view==='dash') renderDash();
+  if(S.view==='find') renderFind();
   if(S.view==='jobs') renderJobs();
   if(S.view==='pay')  renderPay();
   if(S.view==='map')  renderMap();
@@ -755,6 +765,193 @@ document.addEventListener('click', e => {
   const b = e.target.closest('#tabs button, #bnav button');
   if(b){ S.view = b.dataset.v; render(); }
 });
+
+/* ============================================================
+   ค้นหา — พิมพ์อะไรก็ได้ รหัสไลน์ ชื่อหมู่บ้าน เลขใบงาน ชื่อผู้รับจ้าง
+   ค้นจากไลน์แยกในแผนงาน ใบงาน และอุปกรณ์ในผัง SLD
+   ============================================================ */
+let findQ = '', findTimer = null;
+
+function normTxt(v){ return String(v==null?'':v).replace(/\s+/g,'').toLowerCase(); }
+
+/* ใบงานเจ้าของอุปกรณ์ สำหรับหน้าค้นหา (ไล่จากรหัสไลน์ขึ้นไปหาต้นทาง) */
+function ownerOfDevice(dev, byCode, byId){
+  let cur = dev, guard = 0;
+  while(cur && guard++ < 60){
+    const key = normTxt(cur.id).toUpperCase();
+    if(byCode[key]) return byCode[key];
+    cur = cur.parent ? byId[cur.parent] : null;
+  }
+  return '';
+}
+
+function findAll(q){
+  const needle = normTxt(q);
+  if(needle.length < 2) return null;
+  const d = S.data;
+  const jobById = {}; d.jobs.forEach(j => jobById[j.JobID] = j);
+
+  const lines = (d.lines||[]).filter(l =>
+    normTxt(l.LineCode).indexOf(needle) >= 0 ||
+    normTxt(l.PlaceName).indexOf(needle) >= 0
+  ).slice(0, 40);
+
+  const jobs = d.jobs.filter(j =>
+    normTxt(j.MJMNo).indexOf(needle) >= 0 ||
+    normTxt(j.JobName).indexOf(needle) >= 0 ||
+    normTxt(j.SAPDesc).indexOf(needle) >= 0 ||
+    normTxt(j.ZPM4No).indexOf(needle) >= 0 ||
+    normTxt(j.Contractor).indexOf(needle) >= 0 ||
+    normTxt(j.Supervisor).indexOf(needle) >= 0 ||
+    normTxt(j.FeederID).indexOf(needle) >= 0
+  ).slice(0, 20);
+
+  const byCode = {}; (d.lines||[]).forEach(l => {
+    const c = normTxt(l.LineCode).toUpperCase(); if(c) byCode[c] = l.JobID;
+  });
+  const pts = S.sld || [];
+  const byId = {}; pts.forEach(p => { if(p.id) byId[p.id] = p; });
+  const devs = pts.filter(p =>
+    normTxt(p.id).indexOf(needle) >= 0 || normTxt(p.desc).indexOf(needle) >= 0
+  ).slice(0, 20).map(p => Object.assign({}, p, {jobId: ownerOfDevice(p, byCode, byId)}));
+
+  return {lines, jobs, devs, jobById, total: lines.length + jobs.length + devs.length};
+}
+
+/* ดึงพิกัดอุปกรณ์มาเก็บไว้ ถ้ายังไม่เคยโหลด (ใช้ของในเครื่องก่อน) */
+async function ensureSld(){
+  if(S.sld) return;
+  const c = lsGet('sld');
+  if(c && c.points && c.points.length){ S.sld = c.points; S.sldFeeders = c.feeders || []; return; }
+  try{
+    const out = await api('sldPoints');
+    S.sld = out.points || []; S.sldFeeders = out.feeders || [];
+    lsSet('sld', {points:S.sld, feeders:S.sldFeeders});
+  }catch(e){ S.sld = []; }
+}
+
+function renderFind(){
+  const r = findAll(findQ);
+  $('#v-find').innerHTML = `
+    <div class="toolbar">
+      <input class="inp" id="findBox" type="search" inputmode="search"
+        placeholder="รหัสไลน์ ชื่อหมู่บ้าน เลขใบงาน หรือชื่อผู้รับจ้าง"
+        value="${esc(findQ)}" oninput="onFindInput(this.value)" aria-label="ค้นหา">
+    </div>
+    ${!r ? `
+      <div class="card">
+        <h3 style="font-size:16px">ค้นด้วยอะไรก็ได้</h3>
+        <div class="sub" style="margin-top:3px;line-height:1.8">
+          พิมพ์อย่างน้อย 2 ตัวอักษร แล้วระบบจะบอกว่าเป็นงานของใคร<br>ตัดไปรอบไหนแล้ว และรอบถัดไปเดือนอะไร
+        </div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
+          ${['ALA03WF-169','บ้านควน','TT69000391','หจก.กรุณา','ALA06'].map(x =>
+            `<button type="button" class="qchip" onclick="onFindInput('${esc(x)}',true)">${esc(x)}</button>`).join('')}
+        </div>
+        <div class="sub" style="margin-top:16px;line-height:1.7">
+          ใช้ตอนรับโทรศัพท์ร้องเรียนได้เลย ชาวบ้านบอกแค่ชื่อหมู่บ้านหรือซอย
+          พิมพ์ลงไปก็รู้ทันทีว่าอยู่ไลน์ไหน ใครรับผิดชอบ
+        </div>
+      </div>` : (!r.total ? `
+      <div class="card"><div class="sub">ไม่พบ "${esc(findQ)}" ในแผนงานปี ${esc(S.year)}<br>
+        ลองสลับปีที่มุมขวาบน หรือพิมพ์สั้นลง</div></div>` : `
+      ${r.lines.length ? `<div class="findgrp">ไลน์แยกในแผนงาน · ${r.lines.length}</div>
+        ${r.lines.map(l => lineResult(l, r.jobById)).join('')}` : ''}
+      ${r.devs.length ? `<div class="findgrp">อุปกรณ์ในผัง SLD · ${r.devs.length}</div>
+        ${r.devs.map(p => devResult(p, r.jobById)).join('')}` : ''}
+      ${r.jobs.length ? `<div class="findgrp">ใบงาน · ${r.jobs.length}</div>
+        ${r.jobs.map(j => jobResult(j)).join('')}` : ''}
+    `)}`;
+  const box = $('#findBox');
+  if(box && document.activeElement !== box && findQ) { box.focus(); box.setSelectionRange(findQ.length, findQ.length); }
+}
+
+function onFindInput(v, now){
+  findQ = v;
+  clearTimeout(findTimer);
+  findTimer = setTimeout(()=>{ renderFind(); }, now ? 0 : 220);
+  if(!S.sld) ensureSld().then(()=>{ if(S.view==='find') renderFind(); });
+}
+
+function roundDots(l, job){
+  const months = String(job && job.PlanMonths || '').split('/').map(x=>x.trim());
+  return [1,2,3].map(i => {
+    const dt = l['R'+i+'Date'], by = l['R'+i+'By'];
+    const done = String(dt||'').trim() !== '';
+    return `<div style="flex:1;text-align:center">
+      <div style="width:26px;height:26px;border-radius:999px;margin:0 auto 5px;display:flex;align-items:center;
+        justify-content:center;font-size:11px;font-weight:600;
+        ${done ? 'background:var(--ok);color:#fff' : 'background:#fff;border:2px solid #D9D5CC;color:#9A958C'}">
+        ${done ? '&#10003;' : i}</div>
+      <div style="font-size:11px;font-weight:600">รอบ ${i}</div>
+      <div style="font-size:10.5px;color:var(--dim);line-height:1.4">${
+        done ? esc(dt) + (by ? '<br>' + esc(by) : '') : esc(months[i-1] || 'ตามแผน')}</div>
+    </div>`;
+  }).join('');
+}
+
+function lineResult(l, jobById){
+  const j = jobById[l.JobID] || {};
+  return `<div class="card findcard">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div class="kanit" style="font-size:16px">${esc(l.LineCode || '(ไม่มีรหัส)')}</div>
+        <div class="sub" style="margin-top:2px">${esc(l.PlaceName || '')}</div>
+      </div>
+      ${j.Contractor ? `<span class="pill" style="background:${contractorColor(j.Contractor)}1A;color:${contractorColor(j.Contractor)}">${esc(j.Contractor)}</span>` : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px">
+      <div><div class="lbl">ใบงาน</div><div style="font-size:13.5px;font-weight:600">${esc(j.MJMNo || '-')}</div></div>
+      <div><div class="lbl">ผู้ควบคุมงาน</div><div style="font-size:13.5px;font-weight:600">${esc(j.Supervisor || '-')}</div></div>
+      <div><div class="lbl">กลุ่ม / แผนที่</div><div style="font-size:13.5px;font-weight:600">กลุ่ม ${esc(l.GroupNo||'-')} · แผนที่ ${esc(l.PlanNo||'-')}</div></div>
+      <div><div class="lbl">เดือนตามแผน</div><div style="font-size:13.5px;font-weight:600">${esc(j.PlanMonths || '-')}</div></div>
+    </div>
+    <div style="display:flex;margin-top:14px">${roundDots(l, j)}</div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn ghost" style="height:38px;flex:1" onclick="findOnMap('${esc(l.LineCode)}')">ดูบนแผนที่</button>
+      ${j.JobID ? `<button class="btn ghost" style="height:38px;flex:1" onclick="openJob('${esc(j.JobID)}')">เปิดใบงาน</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function devResult(p, jobById){
+  const j = jobById[p.jobId] || {};
+  return `<div class="card findcard">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div class="kanit" style="font-size:15px">${esc(p.id)}</div>
+        <div class="sub" style="margin-top:2px">${esc(p.desc || '')}${p.type ? ' · ' + esc(p.type) : ''}</div>
+      </div>
+      <span class="pill p-gray">${esc(p.feeder || '')}</span>
+    </div>
+    <div class="sub" style="margin-top:10px;line-height:1.7">
+      ${j.MJMNo ? 'อยู่ในใบงาน <b>' + esc(j.MJMNo) + '</b> · ' + esc(j.Contractor || 'ยังไม่ระบุผู้รับจ้าง') : 'ยังจับคู่กับใบงานไม่ได้'}
+      ${p.impact ? '<br>ผู้ใช้ไฟที่กระทบ ' + fmt0(p.impact) + ' ราย' : ''}
+    </div>
+  </div>`;
+}
+
+function jobResult(j){
+  return `<div class="card findcard click" onclick="openJob('${esc(j.JobID)}')">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div class="kanit" style="font-size:15px">${esc(j.MJMNo)} · ${esc(j.FeederID)}</div>
+        <div class="sub" style="margin-top:2px;line-height:1.5">${esc(j.JobName || j.SAPDesc || '')}</div>
+      </div>
+      ${j.Contractor ? `<span class="pill" style="background:${contractorColor(j.Contractor)}1A;color:${contractorColor(j.Contractor)}">${esc(j.Contractor)}</span>` : ''}
+    </div>
+    <div class="sub" style="margin-top:9px">${fmt(j.PlanKm)} กม. · กลุ่ม ${esc(j.MonthGroup||'-')} · ${esc(j.PlanMonths||'-')}</div>
+  </div>`;
+}
+
+/* เปิดแผนที่แล้วกรองเฉพาะใบงานที่มีไลน์นี้ */
+function findOnMap(code){
+  const l = (S.data.lines||[]).find(x => normTxt(x.LineCode) === normTxt(code));
+  const j = l ? S.data.jobs.find(x => x.JobID === l.JobID) : null;
+  if(j){ mapFilter.con = j.Contractor || ''; mapFilter.month = ''; mapFilter.group = ''; }
+  goView('map');
+  toast(j ? 'แสดงพื้นที่ของ ' + (j.Contractor || j.MJMNo) : 'เปิดแผนที่แล้ว');
+}
 
 /* ---------- แดชบอร์ด ---------- */
 function renderDash(){
