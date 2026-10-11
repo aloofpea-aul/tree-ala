@@ -123,6 +123,37 @@ html.diag #diagbox{display:block;position:fixed;left:10px;right:10px;top:50%;tra
 html.diag #diagbox b{font-size:17px;color:#FFE082}
 html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-top:10px;text-align:left}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2F2A34;color:#fff;padding:12px 20px;border-radius:12px;z-index:90;font-size:13px}
+/* --- การ์ดขั้นตอนงาน + แถบเกร็ดการใช้งาน (ท้ายหน้าสรุป) --- */
+.stepgrp{font-size:11px;color:var(--dim);margin:14px 0 2px}
+.steps{display:flex;align-items:flex-start}
+.stp{flex:1;min-width:0;text-align:center;position:relative}
+.stp .bar{position:absolute;top:14px;left:50%;right:-50%;height:3px;background:#EDEAE3}
+.stp .dot{position:relative;z-index:1;width:30px;height:30px;border-radius:999px;margin:0 auto 7px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+  background:#EDEAE3;color:#8A857C;border:2px solid #EDEAE3}
+.stp.done .bar{background:var(--ok)}
+.stp.done .dot{background:var(--ok);color:#fff;border-color:var(--ok)}
+.stp.now .dot{background:#fff;color:var(--warn);border-color:var(--warn)}
+.stp .n{font-size:11px;font-weight:600;line-height:1.3;word-break:break-word}
+.stp .m{font-size:10px;color:var(--dim);margin-top:1px;font-variant-numeric:tabular-nums}
+.nextrow{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;
+  background:transparent;border:0;padding:0;cursor:pointer;font-family:inherit;color:inherit}
+.nextrow .ic{width:26px;height:26px;border-radius:999px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:13px;font-weight:700;background:var(--warn-soft);color:#7A5A10}
+.nextrow .t{font-size:13.5px;font-weight:600;line-height:1.45}
+.nextrow .d{font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px}
+.nextrow .cv{margin-left:auto;color:#B6B1A7;flex-shrink:0;align-self:center}
+.tipbar{display:flex;gap:11px;align-items:flex-start;width:100%;text-align:left;cursor:pointer;
+  background:#FBF4E4;border:1px solid #EAD9AE;border-radius:14px;padding:13px 14px;font-family:inherit}
+.tipbar .k{font-size:11px;font-weight:600;color:#8A6512}
+.tipbar .v{font-size:12.5px;color:#6B5210;line-height:1.65;margin-top:3px}
+.tipdots{display:flex;gap:4px;margin-top:9px}
+.tipdots i{width:5px;height:5px;border-radius:99px;background:#D9C58E;display:block;transition:width .2s}
+.tipdots i.on{background:#8A6512;width:14px}
+.ic-n{width:24px;height:24px;border-radius:999px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:600;background:var(--pea-soft);color:var(--pea)}
+.cv{flex-shrink:0}
+.verline{text-align:center;margin:14px 0 2px;font-size:11px;color:var(--dim);opacity:.8;line-height:1.7}
 .bottomnav{display:none}
 @media (max-width:760px){
   /* โครงแบบแอป — ตรึงเต็มจอที่มองเห็นจริง ให้เลื่อนเฉพาะเนื้อหาข้างใน
@@ -237,7 +268,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11k</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11m</div>
   </form>
 </div>
 
@@ -306,7 +337,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11k';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11m';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -788,10 +819,153 @@ function renderDash(){
       ${todoList(s)}
     </div>
   </div>
-  <div class="sub" style="text-align:center;margin:14px 0 2px;font-size:11px;opacity:.7;line-height:1.7">
-    รุ่นแอป ${BUILD}<br><span id="diag">—</span>
-  </div>`;
+  ${stepCard(s)}
+  ${tipStrip()}
+  <div class="verline">อัปเดตล่าสุด <span id="dashTime">—</span> · รุ่นแอป ${BUILD}${DIAG?'<br><span id="diag"></span>':''}</div>`;
   setTimeout(screenDiag, 60);
+  startTipRotate();
+  const dt = $('#dashTime'); if(dt) dt.textContent = hhmm();
+}
+
+/* ============================================================
+   การ์ด "ขั้นตอนงานหนึ่งรอบ" — คิดจากข้อมูลจริงในชีตทั้งหมด
+   เตรียมงาน (ทำครั้งเดียวต่อปี): ข้องาน MJM/MFO -> ใบสั่ง ZPM4
+   ทำทุกรอบ (ปีละ 3 รอบ): จ่ายงาน -> ตัด -> ตรวจรับ -> SAP Time -> เบิกงวด
+   ============================================================ */
+function curRound(s){
+  for(let i = 0; i < s.roundStat.length; i++){
+    const r = s.roundStat[i];
+    if(r.done < r.total) return r.no;
+  }
+  return s.roundStat.length || 3;
+}
+
+function stepStats(s){
+  const cur = curRound(s);
+  const jobs = s.annual;
+  const total = jobs.length;
+  const roundOf = j => (s.byJob[j.JobID]||[]).find(x => num(x.RoundNo) === cur) || {};
+  const has = v => String(v||'').trim() !== '';
+
+  /* ตัด: นับเป็นใบงาน ใบไหนไลน์แยกลงวันที่ครบถือว่าตัดครบ
+     ใบที่ยังไม่มีรายการไลน์แยก ใช้สถานะรอบแทน */
+  const lineByJob = {};
+  (S.data.lines||[]).forEach(l => { (lineByJob[l.JobID] = lineByJob[l.JobID] || []).push(l); });
+  const cutDone = jobs.filter(j => {
+    const ls = lineByJob[j.JobID];
+    if(ls && ls.length) return ls.every(l => has(l['R'+cur+'Date']));
+    const st = String(roundOf(j).Status||'');
+    return st.indexOf('ตรวจรับแล้ว')>=0 || st.indexOf('รอตรวจรับ')>=0;
+  }).length;
+
+  const payDone = jobs.filter(j =>
+    (S.data.payments||[]).some(p => p.JobID === j.JobID && num(p.Installment) === cur &&
+                                    String(p.Status||'').indexOf('เบิกจ่ายแล้ว')>=0)).length;
+
+  return { cur, total, steps: [
+    {k:'mjm',  n:'ข้องาน',    m:'MJM/MFO', grp:0, v: jobs.filter(j => has(j.MJMNo)).length,
+     miss:'ยังไม่มีเลขข้องาน MJM/MFO', go:'jobs'},
+    {k:'zpm',  n:'ใบสั่ง',    m:'ZPM4',    grp:0, v: jobs.filter(j => has(j.ZPM4No)).length,
+     miss:'ยังไม่มีเลขใบสั่ง ZPM4', go:'jobs'},
+    {k:'assign',n:'จ่ายงาน',  m:'',        grp:1, v: jobs.filter(j => has(roundOf(j).AssignDate)).length,
+     miss:'ยังไม่จ่ายงาน', go:'jobs'},
+    {k:'cut',  n:'ตัด',       m:'',        grp:1, v: cutDone,
+     miss:'ยังตัดไม่ครบ', go:'map'},
+    {k:'acc',  n:'ตรวจรับ',   m:'',        grp:1, v: jobs.filter(j => has(roundOf(j).AcceptDate)).length,
+     miss:'ยังไม่ตรวจรับ', go:'jobs'},
+    {k:'sap',  n:'SAP Time',  m:'',        grp:1, v: jobs.filter(j => has(roundOf(j).SAPTimeDate)).length,
+     miss:'ยังไม่คีย์ SAP Time', go:'jobs'},
+    {k:'pay',  n:'เบิกงวด',   m:'',        grp:1, v: payDone,
+     miss:'ยังไม่เบิกงวด', go:'pay'}
+  ]};
+}
+
+function stepRow(list, total, nowKey){
+  return list.map((st, i) => {
+    const done = st.v >= total && total > 0;
+    const cls = done ? 'done' : (st.k === nowKey ? 'now' : '');
+    const mark = done ? '&#10003;' : (list.slice(0,i).every(x=>x.v>=total) ? String(i+1) : String(i+1));
+    return `<div class="stp ${cls}">${i < list.length-1 ? '<div class="bar"></div>' : ''}
+      <div class="dot">${mark}</div>
+      <div class="n">${esc(st.n)}</div>
+      <div class="m">${st.m ? esc(st.m) : st.v + '/' + total}</div>
+    </div>`;
+  }).join('');
+}
+
+function stepCard(s){
+  if(!s.annual.length) return '';
+  const S2 = stepStats(s);
+  const now = S2.steps.find(x => x.v < S2.total) || S2.steps[S2.steps.length-1];
+  const left = S2.total - now.v;
+  const g0 = S2.steps.filter(x => x.grp === 0);
+  const g1 = S2.steps.filter(x => x.grp === 1);
+  const nowLabel = now.v >= S2.total ? 'ครบทุกขั้นแล้ว' : now.n + (now.m ? ' ' + now.m : '');
+
+  return `
+  <div class="card" style="margin-top:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <h3 style="font-size:16px">ขั้นตอนงานหนึ่งรอบ</h3>
+      <span class="pill p-warn">รอบที่ ${S2.cur}/${esc(S.year)}</span>
+    </div>
+    <div class="sub" style="margin-top:3px">ตอนนี้อยู่ขั้น ${esc(nowLabel)}</div>
+
+    <div class="stepgrp">เตรียมงาน · ทำครั้งเดียวต่อปี</div>
+    <div class="steps">${stepRow(g0, S2.total, now.k)}</div>
+
+    <div class="stepgrp">ทำทุกรอบ · ปีละ 3 รอบ</div>
+    <div class="steps">${stepRow(g1, S2.total, now.k)}</div>
+
+    ${now.v >= S2.total ? '' : `
+    <div style="height:1px;background:var(--line2);margin:16px 0 13px"></div>
+    <button type="button" class="nextrow" onclick="goView('${now.go}')">
+      <div class="ic">!</div>
+      <div><div class="t">ต้องทำต่อ: ${esc(now.miss)}</div>
+        <div class="d">${left} ใบงาน จาก ${S2.total} · รอบที่ ${S2.cur}/${esc(S.year)}</div></div>
+      <svg class="cv" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </button>`}
+  </div>`;
+}
+
+function goView(v){
+  S.view = v; render();
+  const m = document.querySelector('main'); if(m) m.scrollTop = 0;
+}
+
+/* ============ แถบเกร็ดการใช้งาน ============ */
+let tipIdx = 0, tipTimer2 = null;
+function tipStrip(){
+  return `
+  <button type="button" class="tipbar" onclick="openTips()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6512" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2Z"/></svg>
+    <div style="flex:1;min-width:0">
+      <div class="k">เกร็ดการใช้งาน</div>
+      <div class="v" id="tipText">${esc(TIPS[tipIdx % TIPS.length])}</div>
+      <div class="tipdots" id="tipDots">${TIPS.map((_,i)=>`<i class="${i===tipIdx%TIPS.length?'on':''}"></i>`).join('')}</div>
+    </div>
+    <svg class="cv" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B59B5A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;align-self:center" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+  </button>`;
+}
+function startTipRotate(){
+  clearInterval(tipTimer2);
+  tipTimer2 = setInterval(()=>{
+    const t = document.getElementById('tipText');
+    if(!t){ clearInterval(tipTimer2); return; }
+    tipIdx = (tipIdx + 1) % TIPS.length;
+    t.textContent = TIPS[tipIdx];
+    const dots = document.getElementById('tipDots');
+    if(dots) [...dots.children].forEach((d,i)=>d.classList.toggle('on', i===tipIdx));
+  }, 7000);
+}
+function openTips(){
+  openSheet('เกร็ดการใช้งาน', 'รวมทุกข้อ ' + TIPS.length + ' ข้อ', `
+    <div class="card">
+      ${TIPS.map((t,i)=>`
+        <div style="display:flex;gap:11px;align-items:flex-start;padding:11px 0;${i?'border-top:1px solid var(--line2)':''}">
+          <div class="ic-n">${i+1}</div>
+          <div style="font-size:13.5px;line-height:1.65">${esc(t)}</div>
+        </div>`).join('')}
+    </div>`);
 }
 
 function todoList(s){
@@ -1054,6 +1228,22 @@ function openJob(jobId){
    </div>
   </div>`;
   $('#modal').innerHTML = html;
+}
+
+function openSheet(title, sub, bodyHtml){
+  $('#modal').innerHTML = `
+  <div class="mask" onclick="if(event.target===this)closeSheet()">
+   <div class="sheet" style="width:min(520px,100%)">
+     <div class="sheethead">
+       <div style="flex:1">
+         <div style="font-size:12px;color:#D6C6E4">${esc(sub||'')}</div>
+         <div class="kanit" style="font-size:19px;color:#fff">${esc(title)}</div>
+       </div>
+       <button onclick="closeSheet()" aria-label="ปิด">×</button>
+     </div>
+     <div style="padding:16px">${bodyHtml}</div>
+   </div>
+  </div>`;
 }
 
 function closeSheet(){ $('#modal').innerHTML=''; }
@@ -1919,6 +2109,7 @@ setTimeout(diagBox, 1800);
 
 /* อ่านค่าจริงจากเครื่อง ไว้ดูว่าทำไมขอบล่างไม่เต็ม */
 function screenDiag(){
+  if(!DIAG) return;
   const e = document.getElementById('diag');
   if(!e) return;
   const vv = window.visualViewport;
