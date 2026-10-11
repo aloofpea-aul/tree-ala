@@ -150,6 +150,16 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .tipdots{display:flex;gap:4px;margin-top:9px}
 .tipdots i{width:5px;height:5px;border-radius:99px;background:#D9C58E;display:block;transition:width .2s}
 .tipdots i.on{background:#8A6512;width:14px}
+.tick{width:30px;height:30px;flex-shrink:0;border-radius:9px;border:2px solid #D9D5CC;background:#fff;
+  color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tick.on{background:var(--ok);border-color:var(--ok)}
+@media print{
+  body.printing #app,body.printing #splash,body.printing #toast,body.printing .noprint{display:none !important}
+  body.printing .mask{position:static;background:#fff;display:block}
+  body.printing .sheet{width:100% !important;height:auto;overflow:visible;background:#fff}
+  body.printing .card{break-inside:avoid;border:1px solid #CCC;box-shadow:none}
+  body.printing .btn{display:none}
+}
 .findgrp{font-size:12px;color:var(--dim);font-weight:600;margin:16px 0 8px 2px}
 .findgrp:first-child{margin-top:4px}
 .findcard{margin-bottom:10px}
@@ -274,7 +284,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11n</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11r</div>
   </form>
 </div>
 
@@ -305,6 +315,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   <div class="tabs" id="tabs">
     <button data-v="dash" class="on">แดชบอร์ด</button>
     <button data-v="find">ค้นหา</button>
+    <button data-v="check">ตรวจสอบ</button>
     <button data-v="map">แผนที่</button>
     <button data-v="jobs">ใบงาน</button>
     <button data-v="pay">งวดเงิน</button>
@@ -317,6 +328,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
       <div id="map"></div>
     </div>
     <div id="v-find" class="hide"></div>
+    <div id="v-check" class="hide"></div>
     <div id="v-jobs" class="hide"></div>
     <div id="v-pay" class="hide"></div>
   </main>
@@ -324,6 +336,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   <div class="bottomnav" id="bnav">
     <button data-v="dash" class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/></svg>สรุป</button>
     <button data-v="find"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>ค้นหา</button>
+    <button data-v="check"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5 11 13.5 15.5 9"/><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6Z"/></svg>ตรวจสอบ</button>
     <button data-v="map"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2Z"/><path d="M9 5v12"/><path d="M15 7v12"/></svg>แผนที่</button>
     <button data-v="jobs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>ใบงาน</button>
     <button data-v="pay"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>งวดเงิน</button>
@@ -346,7 +359,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11n';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11r';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -753,9 +766,10 @@ function sysPill(sys){
 function render(){
   document.querySelectorAll('#tabs button, #bnav button').forEach(b =>
     b.classList.toggle('on', b.dataset.v === S.view));
-  ['dash','find','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
+  ['dash','find','check','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
   if(S.view==='dash') renderDash();
   if(S.view==='find') renderFind();
+  if(S.view==='check') renderCheck();
   if(S.view==='jobs') renderJobs();
   if(S.view==='pay')  renderPay();
   if(S.view==='map')  renderMap();
@@ -765,6 +779,333 @@ document.addEventListener('click', e => {
   const b = e.target.closest('#tabs button, #bnav button');
   if(b){ S.view = b.dataset.v; render(); }
 });
+
+/* ============================================================
+   ข้อ 2 — ระบบตรวจสอบต้นไม้ (คล้ายงานพาโทรล แต่เฉพาะต้นไม้)
+   เทียบ "เดือนตามแผน" ของแต่ละรอบกับวันนี้ แล้วเรียงว่าไลน์ไหนควรเข้าก่อน
+   เกินกำหนดมากที่สุดขึ้นก่อน ตามด้วยจำนวนผู้ใช้ไฟที่จะกระทบถ้าไฟดับ
+   ============================================================ */
+const MONTH_NO = {
+  'มกราคม':1,'ม.ค.':1,'กุมภาพันธ์':2,'ก.พ.':2,'มีนาคม':3,'มี.ค.':3,'เมษายน':4,'เม.ย.':4,
+  'พฤษภาคม':5,'พ.ค.':5,'มิถุนายน':6,'มิ.ย.':6,'กรกฎาคม':7,'ก.ค.':7,'สิงหาคม':8,'ส.ค.':8,
+  'กันยายน':9,'ก.ย.':9,'ตุลาคม':10,'ต.ค.':10,'พฤศจิกายน':11,'พ.ย.':11,'ธันวาคม':12,'ธ.ค.':12
+};
+function monthNo(name){ return MONTH_NO[String(name||'').trim()] || 0; }
+
+/* กำหนดส่งของรอบนั้น = วันสุดท้ายของเดือนตามแผน (ปี พ.ศ. ของแผน) */
+function roundDeadline(job, no){
+  const mn = monthNo(planMonthOf(job, no));
+  if(!mn) return null;
+  const ce = num(S.year) - 543;                 // 2570 พ.ศ. -> 2027 ค.ศ.
+  return new Date(ce, mn, 0, 23, 59, 59);       // วันที่ 0 ของเดือนถัดไป = วันสุดท้าย
+}
+function daysBetween(a, b){ return Math.floor((a - b) / 86400000); }
+
+function checkQueue(){
+  const d = S.data;
+  const now = new Date();
+  const jobById = {}; d.jobs.forEach(j => jobById[j.JobID] = j);
+  const impactOf = {};
+  (S.sld||[]).forEach(p => { if(p.id) impactOf[normTxt(p.id).toUpperCase()] = num(p.impact); });
+
+  const rows = [];
+  (d.lines||[]).forEach(l => {
+    const job = jobById[l.JobID];
+    if(!job) return;
+    for(let no = 1; no <= 3; no++){
+      if(String(l['R'+no+'Date']||'').trim() !== '') continue;   // ตัดแล้ว ข้าม
+      const dl = roundDeadline(job, no);
+      if(!dl) continue;
+      const over = daysBetween(now, dl);                          // บวก = เกินกำหนด
+      rows.push({
+        line: l, job, no, deadline: dl, over,
+        impact: impactOf[normTxt(l.LineCode).toUpperCase()] || 0,
+        month: planMonthOf(job, no)
+      });
+      break;                                                      // เอาเฉพาะรอบที่ค้างอยู่รอบแรก
+    }
+  });
+
+  rows.sort((a,b) => (b.over - a.over) || (b.impact - a.impact));
+  return {
+    rows,
+    overdue: rows.filter(r => r.over > 0),
+    soon:    rows.filter(r => r.over <= 0 && r.over > -30),
+    later:   rows.filter(r => r.over <= -30),
+    risk:    (d.findings||[]).filter(f => String(f.Severity||'').indexOf('เสี่ยง')>=0 ||
+                                          String(f.Status||'').indexOf('รอปรับปรุง')>=0)
+  };
+}
+
+function renderCheck(){
+  if(!S.sld) ensureSld().then(()=>{ if(S.view==='check') renderCheck(); });
+  const q = checkQueue();
+  const show = (q.overdue.length ? q.overdue : q.soon).slice(0, 60);
+  const kpi = (lbl, n, sub, col) => `
+    <div class="card kpi" style="padding:14px">
+      <div class="lbl">${lbl}</div>
+      <div class="n" style="font-size:24px;${col?'color:'+col:''}">${n}</div>
+      <div class="sub" style="font-size:11px">${sub}</div>
+    </div>`;
+
+  $('#v-check').innerHTML = `
+    <div class="grid kpigrid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:14px">
+      ${kpi('เกินกำหนดแล้ว', q.overdue.length, 'ไลน์แยกที่ยังไม่ตัด', q.overdue.length?'var(--bad)':'')}
+      ${kpi('ใกล้ถึงกำหนด', q.soon.length, 'ภายใน 30 วัน', q.soon.length?'var(--warn)':'')}
+      ${kpi('ยังไม่ถึงกำหนด', q.later.length, 'ตามแผนปี ' + esc(S.year))}
+      ${kpi('จุดเสี่ยงค้างอยู่', q.risk.length, 'จากการบันทึกหน้างาน', q.risk.length?'var(--bad)':'')}
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3 style="font-size:16px">${q.overdue.length ? 'คิวงานที่ต้องเข้าก่อน' : 'คิวงานที่ใกล้ถึงกำหนด'}</h3>
+      <div class="sub" style="margin-top:3px;margin-bottom:6px">
+        เรียงจากเกินกำหนดมากที่สุด ถ้าเกินเท่ากันเรียงตามจำนวนผู้ใช้ไฟที่จะกระทบ
+        ${S.sld ? '' : ' · กำลังดึงจำนวนผู้ใช้ไฟจากผัง SLD'}
+      </div>
+      ${show.length ? show.map(r => `
+        <div style="display:flex;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--line2)">
+          <div style="width:52px;flex-shrink:0;text-align:center">
+            <div style="font-family:'Kanit';font-size:17px;font-weight:600;color:${r.over>0?'var(--bad)':'var(--warn)'}">
+              ${r.over > 0 ? '+' + r.over : Math.abs(r.over)}</div>
+            <div style="font-size:10px;color:var(--dim)">${r.over > 0 ? 'วันที่เกิน' : 'วันที่เหลือ'}</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(r.line.LineCode||'(ไม่มีรหัส)')} · ${esc(r.line.PlaceName||'')}</div>
+            <div class="sub">รอบ ${r.no} · ${esc(r.month)} · ${esc(r.job.Contractor||'ยังไม่ระบุผู้รับจ้าง')}${
+              r.impact ? ' · กระทบ ' + fmt0(r.impact) + ' ราย' : ''}</div>
+          </div>
+          <button class="btn ghost" style="height:34px;padding:0 11px;font-size:12px;flex-shrink:0"
+            onclick="openAccept('${esc(r.job.JobID)}',${r.no})">ลงผล</button>
+        </div>`).join('')
+        : '<div class="sub" style="padding-top:10px">ไม่มีไลน์ค้างในช่วงนี้ — ตัดครบตามแผนแล้ว</div>'}
+      ${show.length >= 60 ? '<div class="sub" style="padding-top:10px">แสดง 60 รายการแรกจาก ' + (q.overdue.length||q.soon.length) + '</div>' : ''}
+    </div>
+
+    ${q.risk.length ? `
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:4px">จุดเสี่ยงที่บันทึกไว้หน้างาน</h3>
+      <div class="sub" style="margin-bottom:6px">ยังไม่ได้ปรับปรุง ${q.risk.length} จุด</div>
+      ${q.risk.slice(0,20).map(f => `
+        <div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line2)">
+          ${f.PhotoBefore?`<img src="${esc(f.PhotoBefore)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:8px;flex-shrink:0">`:''}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(f.DeviceID||'หมุดอิสระ')} · ${esc(f.TreeType||'')}</div>
+            <div class="sub">${esc(f.Severity||'')} · แจ้ง ${esc(f.ReportDate||'')} โดย ${esc(f.Reporter||'')}</div>
+          </div>
+        </div>`).join('')}
+    </div>` : ''}`;
+}
+
+/* ============================================================
+   ข้อ 3 — ใบตรวจรับงาน
+   รวบรวมไลน์แยกของใบงานในรอบนั้น ติ๊กว่าตัดแล้วได้ทีละเส้น
+   นับความครบถ้วน แล้วกดยืนยันตรวจรับทีเดียว พิมพ์เป็นเอกสารได้
+   ใช้คำสั่งเดิมที่มีอยู่แล้ว (saveLine / saveRound) ไม่ต้องเพิ่มคอลัมน์
+   ============================================================ */
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+function planMonthOf(job, no){
+  const m = String(job && job.PlanMonths || '').split('/').map(x=>x.trim());
+  return m[no-1] || '';
+}
+
+function acceptData(jobId, no){
+  const d = S.data;
+  const job = d.jobs.find(x => x.JobID === jobId) || {};
+  const round = (d.rounds||[]).find(r => r.JobID === jobId && num(r.RoundNo) === no) || {};
+  const lines = (d.lines||[]).filter(l => l.JobID === jobId)
+                  .sort((a,b)=>num(a.Seq)-num(b.Seq));
+  const cut = lines.filter(l => String(l['R'+no+'Date']||'').trim() !== '');
+  const finds = (d.findings||[]).filter(f => f.JobID === jobId);
+  const photoB = finds.filter(f => String(f.PhotoBefore||'').trim() !== '').length;
+  const photoA = finds.filter(f => String(f.PhotoAfter||'').trim() !== '').length;
+  const last = cut.map(l => l['R'+no+'Date']).sort().slice(-1)[0] || '';
+  return {job, round, lines, cut, finds, photoB, photoA, last, no};
+}
+
+function openAccept(jobId, no){
+  const a = acceptData(jobId, no);
+  const pct = a.lines.length ? Math.round(a.cut.length / a.lines.length * 100) : 0;
+  const done = String(a.round.AcceptDate||'').trim() !== '';
+
+  const tile = (lbl, val, sub, tone) => `
+    <div style="flex:1;min-width:0;background:${tone||'#FAF9F6'};border:1px solid var(--line);border-radius:12px;padding:11px">
+      <div class="lbl">${lbl}</div>
+      <div class="kanit" style="font-size:19px;line-height:1.25">${val}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:1px">${sub||''}</div>
+    </div>`;
+
+  $('#modal').innerHTML = `
+  <div class="mask" onclick="if(event.target===this)closeSheet()">
+   <div class="sheet" id="acceptSheet">
+    <div class="sheethead noprint">
+      <div style="flex:1">
+        <div style="font-size:12px;color:#D6C6E4">ใบตรวจรับงานตัดต้นไม้ · รอบที่ ${no}/${esc(S.year)}</div>
+        <div class="kanit" style="font-size:19px;color:#fff">${esc(a.job.MJMNo)} · ${esc(a.job.FeederID)}</div>
+      </div>
+      <button onclick="closeSheet()" aria-label="ปิด">×</button>
+    </div>
+    <div style="padding:16px" id="acceptBody">
+
+      <div class="printhead" style="display:none">
+        <div style="font-family:'Kanit';font-size:18px;font-weight:600">ใบตรวจรับงานตัดต้นไม้ กฟส.อ่าวลึก</div>
+        <div style="font-size:13px;margin-top:2px">${esc(a.job.MJMNo)} · ฟีดเดอร์ ${esc(a.job.FeederID)} · รอบที่ ${no}/${esc(S.year)}
+          · ผู้รับจ้าง ${esc(a.job.Contractor||'-')}</div>
+        <div style="font-size:12px;color:#5F5C55;margin-top:2px">${esc(a.job.JobName||'')}</div>
+        <hr style="margin:10px 0">
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sub" style="line-height:1.7">${esc(a.job.JobName||a.job.SAPDesc||'')}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          ${tile('ไลน์ที่ตัดแล้ว', a.cut.length + '<span style="font-size:13px;color:var(--muted)">/' + a.lines.length + '</span>',
+                 pct + '%', pct===100 ? 'var(--ok-soft)' : '#FAF9F6')}
+          ${tile('ระยะทางตามแผน', fmt(a.job.PlanKm), 'กม.')}
+          ${tile('รูปก่อน/หลัง', a.photoB + ' / ' + a.photoA, 'จุดที่พบ ' + a.finds.length + ' จุด')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px">
+          <div><div class="lbl">ผู้รับจ้าง</div><div style="font-size:13.5px;font-weight:600">${esc(a.job.Contractor||'-')}</div></div>
+          <div><div class="lbl">ผู้ควบคุมงาน</div><div style="font-size:13.5px;font-weight:600">${esc(a.job.Supervisor||'-')}</div></div>
+          <div><div class="lbl">เดือนตามแผน</div><div style="font-size:13.5px;font-weight:600">${esc(planMonthOf(a.job,no)||'-')}</div></div>
+          <div><div class="lbl">วันตัดล่าสุด</div><div style="font-size:13.5px;font-weight:600">${esc(a.last||'-')}</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <h3 style="font-size:16px;flex:1">ไลน์แยกในใบงาน (${a.lines.length})</h3>
+          <button class="btn ghost noprint" style="height:34px;font-size:12.5px"
+            onclick="acceptTickAll('${esc(jobId)}',${no})">ติ๊กว่าตัดครบทุกเส้น</button>
+        </div>
+        ${a.lines.length ? a.lines.map(l => {
+          const dt = String(l['R'+no+'Date']||'').trim();
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line2)">
+            <button type="button" class="tick noprint ${dt?'on':''}" aria-label="สลับสถานะตัด"
+              onclick="acceptTick('${esc(l.LineID)}',${no},${dt?'false':'true'})">${dt?'&#10003;':''}</button>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600">${esc(l.LineCode||'(ไม่มีรหัส)')}</div>
+              <div class="sub">${esc(l.PlaceName||'')}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:12.5px;font-weight:600;color:${dt?'var(--ok)':'var(--dim)'}">${dt?esc(dt):'ยังไม่ตัด'}</div>
+              <div style="font-size:11px;color:var(--dim)">${dt ? esc(l['R'+no+'By']||'') : ''}</div>
+            </div>
+          </div>`;
+        }).join('') : '<div class="sub">ใบงานนี้ยังไม่มีรายการไลน์แยกในระบบ</div>'}
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <h3 style="font-size:16px;margin-bottom:10px">สรุปผลการตรวจรับ</h3>
+        <div class="fieldrow">
+          <div class="field"><label>วันที่ตรวจรับ</label>
+            <input class="inp" type="date" id="acDate" value="${esc(a.round.AcceptDate || todayISO())}"></div>
+          <div class="field"><label>ผู้ตรวจรับ</label>
+            <input class="inp" type="text" id="acBy" value="${esc(a.round.Inspector || (S.user?S.user.name:''))}"></div>
+        </div>
+        <div class="field" style="margin-top:10px"><label>หมายเหตุ</label>
+          <input class="inp" style="width:100%" type="text" id="acNote" value="${esc(a.round.Note||'')}"
+            placeholder="เช่น เหลือ 2 เส้นติดสวนยาง นัดเข้าใหม่สัปดาห์หน้า"></div>
+        ${pct < 100 ? `<div class="sub" style="margin-top:10px;color:#8A5A10">
+          ยังตัดไม่ครบ ${a.lines.length - a.cut.length} เส้น — ยืนยันตรวจรับได้ แต่ควรระบุเหตุผลในหมายเหตุ</div>` : ''}
+        <div style="display:flex;gap:8px;margin-top:14px" class="noprint">
+          <button class="btn ghost" style="height:42px;flex:1" onclick="printAccept()">พิมพ์ใบตรวจรับ</button>
+          <button class="btn ok" style="height:42px;flex:1" id="acBtn"
+            onclick="confirmAccept('${esc(jobId)}',${no})">${done?'บันทึกการแก้ไข':'ยืนยันตรวจรับ'}</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:4px">ทำต่อในระบบของ กฟภ.</h3>
+        <div class="sub" style="margin-bottom:10px">ใบนี้ใช้จัดข้อมูลให้ครบก่อน แล้วค่อยไปคีย์ในระบบจริง</div>
+        ${[['คีย์ข้องานใน MJM/MFO ให้ครบ', a.job.MJMNo ? 'เลขข้องาน ' + a.job.MJMNo : 'ยังไม่มีเลขข้องาน'],
+           ['ลง Time ใน SAP', a.round.SAPTimeDate ? 'ลงแล้ว ' + a.round.SAPTimeDate : 'ยังไม่ได้ลง'],
+           ['ตั้งเบิกงวดที่ ' + no, 'ดูได้ที่แท็บงวดเงิน']].map(([t,d])=>`
+          <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line2)">
+            <div class="ic-n">&#8226;</div>
+            <div><div style="font-size:13.5px;font-weight:600">${esc(t)}</div>
+            <div class="sub">${esc(d)}</div></div>
+          </div>`).join('')}
+      </div>
+
+      <div class="printsign" style="display:none">
+        <div style="display:flex;gap:40px;margin-top:28px">
+          <div style="flex:1;text-align:center">
+            <div style="border-bottom:1px dotted #555;height:46px"></div>
+            <div style="font-size:12px;margin-top:6px">ผู้รับจ้าง</div></div>
+          <div style="flex:1;text-align:center">
+            <div style="border-bottom:1px dotted #555;height:46px"></div>
+            <div style="font-size:12px;margin-top:6px">ผู้ควบคุมงาน</div></div>
+          <div style="flex:1;text-align:center">
+            <div style="border-bottom:1px dotted #555;height:46px"></div>
+            <div style="font-size:12px;margin-top:6px">ผู้ตรวจรับ</div></div>
+        </div>
+      </div>
+    </div>
+   </div>
+  </div>`;
+}
+
+async function acceptTick(lineId, no, on){
+  const l = (S.data.lines||[]).find(x => x.LineID === lineId);
+  if(!l) return;
+  const fields = {};
+  fields['R'+no+'Date'] = on ? todayISO() : '';
+  fields['R'+no+'By']   = on ? (S.user?S.user.name:'') : '';
+  Object.assign(l, fields);
+  const openJobId = l.JobID;
+  openAccept(openJobId, no);                       // วาดใหม่ทันที ไม่ต้องรอเน็ต
+  try{ await api('saveLine', {lineId, fields}); }
+  catch(e){ toast(e.message); }
+}
+
+async function acceptTickAll(jobId, no){
+  const lines = (S.data.lines||[]).filter(l => l.JobID === jobId && String(l['R'+no+'Date']||'').trim()==='');
+  if(!lines.length){ toast('ตัดครบทุกเส้นแล้ว'); return; }
+  toast('กำลังบันทึก ' + lines.length + ' เส้น…', 3200);
+  for(const l of lines){
+    const fields = {}; fields['R'+no+'Date'] = todayISO(); fields['R'+no+'By'] = S.user?S.user.name:'';
+    Object.assign(l, fields);
+    try{ await api('saveLine', {lineId: l.LineID, fields}); }catch(e){ toast(e.message); break; }
+  }
+  openAccept(jobId, no);
+  toast('บันทึกแล้ว');
+}
+
+async function confirmAccept(jobId, no){
+  const btn = $('#acBtn'); if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+  const r = (S.data.rounds||[]).find(x => x.JobID === jobId && num(x.RoundNo) === no);
+  if(!r){ toast('ไม่พบรอบนี้'); return; }
+  const fields = {
+    AcceptDate: $('#acDate').value,
+    Inspector:  $('#acBy').value,
+    Note:       $('#acNote').value,
+    Status:     'ตรวจรับแล้ว'
+  };
+  try{
+    await api('saveRound', {roundId: r.RoundID, fields});
+    Object.assign(r, fields);
+    toast('ยืนยันตรวจรับเรียบร้อย');
+    closeSheet();
+    render();
+  }catch(e){
+    toast(e.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'ยืนยันตรวจรับ'; }
+  }
+}
+
+function printAccept(){
+  document.body.classList.add('printing');
+  document.querySelectorAll('.printhead,.printsign').forEach(e => e.style.display = 'block');
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{
+      document.body.classList.remove('printing');
+      document.querySelectorAll('.printhead,.printsign').forEach(e => e.style.display = 'none');
+    }, 400);
+  }, 80);
+}
 
 /* ============================================================
    ค้นหา — พิมพ์อะไรก็ได้ รหัสไลน์ ชื่อหมู่บ้าน เลขใบงาน ชื่อผู้รับจ้าง
@@ -1382,6 +1723,7 @@ function openJob(jobId){
             </div>
             <div style="margin-top:10px;display:flex;gap:8px">
               <button class="btn ok" style="height:38px" id="rb-${esc(r.RoundID)}" onclick="saveRound('${esc(r.RoundID)}')">บันทึกรอบนี้</button>
+              <button class="btn ghost" style="height:38px" onclick="openAccept('${esc(j.JobID)}',${num(r.RoundNo)})">ใบตรวจรับ</button>
             </div>
           </div>`).join('')}
       </div>
