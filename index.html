@@ -105,9 +105,10 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .tipbox .k{font-size:11px;font-weight:600;color:var(--pea);white-space:nowrap}
 .tipbox .v{font-size:12px;color:var(--muted);line-height:1.6}
 /* --- modal --- */
-.mask{position:fixed;inset:0;background:rgba(26,26,24,.45);display:flex;justify-content:flex-end;z-index:60}
-.sheet{width:min(720px,100%);background:var(--ground);height:100%;overflow:auto}
+.mask{position:fixed;left:0;right:0;top:0;height:var(--vh,100%);background:rgba(26,26,24,.45);display:flex;justify-content:flex-end;z-index:60}
+.sheet{width:min(720px,100%);background:var(--ground);height:100%;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .sheethead{background:var(--pea);color:#fff;padding:16px 20px;display:flex;gap:12px;align-items:flex-start;position:sticky;top:0;z-index:2}
+.sheetbody{padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
 .sheethead button{border:0;background:transparent;color:#fff;font-size:22px;cursor:pointer;line-height:1}
 .fieldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
@@ -209,6 +210,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   #map{min-height:220px}
   /* ตัวกรองแผนที่บนมือถือ — เรียงแถวเดียวแล้วเลื่อนซ้ายขวา
      แทนที่จะตกบรรทัดสี่แถวจนกินพื้นที่แผนที่ */
+  .sheethead{padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top))}
   .mapbar{gap:6px;padding-bottom:8px;flex-wrap:nowrap;flex-direction:column;align-items:stretch}
   /* overscroll-behavior กันไม่ให้การเลื่อนแถวนี้ไปชนขอบจอ
      แล้วไอโฟนเข้าใจผิดว่าเป็นการปัดย้อนกลับ (จะมีแถบเทาลูกศรโผล่มา) */
@@ -227,7 +229,6 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   .toolbar .inp,.toolbar select.inp{height:38px;font-size:13px}
   .toolbar .btn{height:38px;padding:0 12px;font-size:13px}
   .fieldrow{grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
-  .sheethead{padding:12px 14px}
 
   /* การ์ดตัวเลขสรุป — บนมือถือเรียงสองคอลัมน์ ไม่ใช่ใบละแถว
      จะเห็นตัวเลขสำคัญครบในจอเดียวโดยไม่ต้องเลื่อน */
@@ -284,7 +285,7 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     <div id="loginMsg" class="sub" style="margin-top:12px;color:var(--bad)"></div>
     <div class="sub" style="margin-top:16px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ Single Line Diagram และแอปอื่นในศูนย์รวมงาน</div>
     <div style="margin-top:12px"><a href="../" style="font-size:13px">&larr; กลับไปศูนย์รวมงาน กฟส.อ่าวลึก</a></div>
-    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11r</div>
+    <div class="sub" style="margin-top:10px;font-size:11px;opacity:.6">รุ่นแอป BUILD-2026-10-11t</div>
   </form>
 </div>
 
@@ -359,7 +360,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11r';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-11t';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -902,6 +903,33 @@ function renderCheck(){
    นับความครบถ้วน แล้วกดยืนยันตรวจรับทีเดียว พิมพ์เป็นเอกสารได้
    ใช้คำสั่งเดิมที่มีอยู่แล้ว (saveLine / saveRound) ไม่ต้องเพิ่มคอลัมน์
    ============================================================ */
+/* ============ วันที่ พ.ศ. กับ ค.ศ. ============
+   ข้อมูลเดิมในชีตปนกันอยู่ ของที่นำเข้าตอนตั้งระบบเป็น พ.ศ. (2569-01-23)
+   ส่วนที่กรอกผ่านช่องวันที่ของเบราว์เซอร์เป็น ค.ศ. (2026-01-23)
+   ช่อง <input type=date> บนไอโฟนที่ตั้งภาษาไทยจะบวก 543 ให้อีกชั้น
+   ปีเลยกลายเป็น 3112  จึงต้องแปลงเข้า-ออกให้ชัดเจน
+   อ่าน: เดาจากตัวเลขปี มากกว่า 2400 = พ.ศ.  เขียน: เก็บเป็น พ.ศ. เสมอ */
+function splitDate_(v){
+  const m = /^(\d{4})-(\d{2}-\d{2})/.exec(String(v||'').trim());
+  return m ? {y: +m[1], md: m[2]} : null;
+}
+function dateForInput(v){                 // -> ค.ศ. สำหรับใส่ในช่องวันที่
+  const d = splitDate_(v); if(!d) return '';
+  return (d.y > 2400 ? d.y - 543 : d.y) + '-' + d.md;
+}
+function dateForStore(v){                 // ค่าจากช่องวันที่ -> พ.ศ. สำหรับเก็บ
+  const d = splitDate_(v); if(!d) return '';
+  return (d.y < 2400 ? d.y + 543 : d.y) + '-' + d.md;
+}
+function dateShow(v){                     // แสดงผลเป็น พ.ศ. เสมอ
+  const d = splitDate_(v); if(!d) return String(v||'');
+  return (d.y < 2400 ? d.y + 543 : d.y) + '-' + d.md;
+}
+function todayStore(){                    // วันนี้ในรูปแบบ พ.ศ.
+  const d = new Date();
+  return (d.getFullYear()+543) + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
 function todayISO(){
   const d = new Date();
   return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
@@ -947,7 +975,7 @@ function openAccept(jobId, no){
       </div>
       <button onclick="closeSheet()" aria-label="ปิด">×</button>
     </div>
-    <div style="padding:16px" id="acceptBody">
+    <div class="sheetbody" id="acceptBody">
 
       <div class="printhead" style="display:none">
         <div style="font-family:'Kanit';font-size:18px;font-weight:600">ใบตรวจรับงานตัดต้นไม้ กฟส.อ่าวลึก</div>
@@ -969,7 +997,7 @@ function openAccept(jobId, no){
           <div><div class="lbl">ผู้รับจ้าง</div><div style="font-size:13.5px;font-weight:600">${esc(a.job.Contractor||'-')}</div></div>
           <div><div class="lbl">ผู้ควบคุมงาน</div><div style="font-size:13.5px;font-weight:600">${esc(a.job.Supervisor||'-')}</div></div>
           <div><div class="lbl">เดือนตามแผน</div><div style="font-size:13.5px;font-weight:600">${esc(planMonthOf(a.job,no)||'-')}</div></div>
-          <div><div class="lbl">วันตัดล่าสุด</div><div style="font-size:13.5px;font-weight:600">${esc(a.last||'-')}</div></div>
+          <div><div class="lbl">วันตัดล่าสุด</div><div style="font-size:13.5px;font-weight:600">${esc(dateShow(a.last)||'-')}</div></div>
         </div>
       </div>
 
@@ -989,7 +1017,7 @@ function openAccept(jobId, no){
               <div class="sub">${esc(l.PlaceName||'')}</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:12.5px;font-weight:600;color:${dt?'var(--ok)':'var(--dim)'}">${dt?esc(dt):'ยังไม่ตัด'}</div>
+              <div style="font-size:12.5px;font-weight:600;color:${dt?'var(--ok)':'var(--dim)'}">${dt?esc(dateShow(dt)):'ยังไม่ตัด'}</div>
               <div style="font-size:11px;color:var(--dim)">${dt ? esc(l['R'+no+'By']||'') : ''}</div>
             </div>
           </div>`;
@@ -1000,7 +1028,7 @@ function openAccept(jobId, no){
         <h3 style="font-size:16px;margin-bottom:10px">สรุปผลการตรวจรับ</h3>
         <div class="fieldrow">
           <div class="field"><label>วันที่ตรวจรับ</label>
-            <input class="inp" type="date" id="acDate" value="${esc(a.round.AcceptDate || todayISO())}"></div>
+            <input class="inp" type="date" id="acDate" value="${esc(dateForInput(a.round.AcceptDate) || todayISO())}"></div>
           <div class="field"><label>ผู้ตรวจรับ</label>
             <input class="inp" type="text" id="acBy" value="${esc(a.round.Inspector || (S.user?S.user.name:''))}"></div>
         </div>
@@ -1051,7 +1079,7 @@ async function acceptTick(lineId, no, on){
   const l = (S.data.lines||[]).find(x => x.LineID === lineId);
   if(!l) return;
   const fields = {};
-  fields['R'+no+'Date'] = on ? todayISO() : '';
+  fields['R'+no+'Date'] = on ? todayStore() : '';
   fields['R'+no+'By']   = on ? (S.user?S.user.name:'') : '';
   Object.assign(l, fields);
   const openJobId = l.JobID;
@@ -1065,7 +1093,7 @@ async function acceptTickAll(jobId, no){
   if(!lines.length){ toast('ตัดครบทุกเส้นแล้ว'); return; }
   toast('กำลังบันทึก ' + lines.length + ' เส้น…', 3200);
   for(const l of lines){
-    const fields = {}; fields['R'+no+'Date'] = todayISO(); fields['R'+no+'By'] = S.user?S.user.name:'';
+    const fields = {}; fields['R'+no+'Date'] = todayStore(); fields['R'+no+'By'] = S.user?S.user.name:'';
     Object.assign(l, fields);
     try{ await api('saveLine', {lineId: l.LineID, fields}); }catch(e){ toast(e.message); break; }
   }
@@ -1078,7 +1106,7 @@ async function confirmAccept(jobId, no){
   const r = (S.data.rounds||[]).find(x => x.JobID === jobId && num(x.RoundNo) === no);
   if(!r){ toast('ไม่พบรอบนี้'); return; }
   const fields = {
-    AcceptDate: $('#acDate').value,
+    AcceptDate: dateForStore($('#acDate').value),
     Inspector:  $('#acBy').value,
     Note:       $('#acNote').value,
     Status:     'ตรวจรับแล้ว'
@@ -1226,7 +1254,7 @@ function roundDots(l, job){
         ${done ? '&#10003;' : i}</div>
       <div style="font-size:11px;font-weight:600">รอบ ${i}</div>
       <div style="font-size:10.5px;color:var(--dim);line-height:1.4">${
-        done ? esc(dt) + (by ? '<br>' + esc(by) : '') : esc(months[i-1] || 'ตามแผน')}</div>
+        done ? esc(dateShow(dt)) + (by ? '<br>' + esc(by) : '') : esc(months[i-1] || 'ตามแผน')}</div>
     </div>`;
   }).join('');
 }
@@ -1712,9 +1740,9 @@ function openJob(jobId){
               <div style="flex:1"></div>${statusPill(r.Status)}
             </div>
             <div class="fieldrow">
-              <div class="field"><label>วันจ่ายงาน</label><input class="inp" type="date" value="${esc(r.AssignDate)}" id="as-${esc(r.RoundID)}"></div>
-              <div class="field"><label>วันตรวจรับ</label><input class="inp" type="date" value="${esc(r.AcceptDate)}" id="ac-${esc(r.RoundID)}"></div>
-              <div class="field"><label>ลง Time ใน SAP</label><input class="inp" type="date" value="${esc(r.SAPTimeDate)}" id="sp-${esc(r.RoundID)}"></div>
+              <div class="field"><label>วันจ่ายงาน</label><input class="inp" type="date" value="${esc(dateForInput(r.AssignDate))}" id="as-${esc(r.RoundID)}"></div>
+              <div class="field"><label>วันตรวจรับ</label><input class="inp" type="date" value="${esc(dateForInput(r.AcceptDate))}" id="ac-${esc(r.RoundID)}"></div>
+              <div class="field"><label>ลง Time ใน SAP</label><input class="inp" type="date" value="${esc(dateForInput(r.SAPTimeDate))}" id="sp-${esc(r.RoundID)}"></div>
               <div class="field"><label>สถานะ</label>
                 <select class="inp" id="st-${esc(r.RoundID)}">
                   ${['ยังไม่จ่ายงาน','จ่ายงาน/รอตรวจรับ','ตรวจรับแล้ว','เกินกำหนดแผน'].map(o =>
@@ -1780,7 +1808,7 @@ function openSheet(title, sub, bodyHtml){
        </div>
        <button onclick="closeSheet()" aria-label="ปิด">×</button>
      </div>
-     <div style="padding:16px">${bodyHtml}</div>
+     <div class="sheetbody">${bodyHtml}</div>
    </div>
   </div>`;
 }
@@ -1791,9 +1819,9 @@ async function saveRound(roundId){
   const btn = $('#rb-'+roundId);
   if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
   const fields = {
-    AssignDate:  $('#as-'+roundId).value,
-    AcceptDate:  $('#ac-'+roundId).value,
-    SAPTimeDate: $('#sp-'+roundId).value,
+    AssignDate:  dateForStore($('#as-'+roundId).value),
+    AcceptDate:  dateForStore($('#ac-'+roundId).value),
+    SAPTimeDate: dateForStore($('#sp-'+roundId).value),
     Status:      $('#st-'+roundId).value
   };
   try{
