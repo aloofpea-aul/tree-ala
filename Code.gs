@@ -42,6 +42,9 @@ function doPost(e) {
   try {
     if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
   } catch (err) { body = {}; }
+  if (body && body.events && Object.prototype.toString.call(body.events) === '[object Array]') {
+    return lineWebhook_(body);
+  }
   return handle_(e, body);
 }
 
@@ -1004,6 +1007,85 @@ function setupLineConfig() {
     if (!have[row[0]]) { sh.appendRow(row); added.push(row[0]); }
   });
   return added.length ? 'เพิ่มแล้ว: ' + added.join(', ') : 'มีครบอยู่แล้ว';
+}
+
+/* ---- เขียนค่าลงแท็บ Config มีคีย์อยู่แล้วก็ทับ ไม่มีก็เพิ่มใหม่ ---- */
+function setConfig_(key, value, note) {
+  var sh = db_().getSheetByName(TABLES.config);
+  if (!sh) return false;
+  var v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]).trim() === key) {
+      sh.getRange(i + 1, 2).setValue(value);
+      bumpStamp_();
+      return true;
+    }
+  }
+  sh.appendRow([key, value, note || '']);
+  bumpStamp_();
+  return true;
+}
+
+/* ====== ตัวรับ Webhook ของ LINE ======
+   ใช้เพื่อ "จับ groupId ให้อัตโนมัติ" — ตั้ง Webhook URL เป็น URL ของเว็บแอปนี้
+   แล้วพิมพ์อะไรก็ได้ในกลุ่มหนึ่งครั้ง ระบบจะเขียน LINE_TARGET ลงแท็บ Config ให้เอง
+   พิมพ์คำว่า  รหัสกลุ่ม  ในกลุ่ม จะตอบรหัสกลับมาให้ดูด้วย (ถ้าใส่ token แล้ว)  */
+function lineWebhook_(body) {
+  try {
+    var evs = body.events || [];
+    for (var i = 0; i < evs.length; i++) {
+      var ev = evs[i] || {};
+      var src = ev.source || {};
+      var id = src.groupId || src.roomId || src.userId || '';
+      var kind = src.groupId ? 'group' : (src.roomId ? 'room' : 'user');
+      if (!id) continue;
+
+      var cur = String(getConfig_().LINE_TARGET || '').trim();
+      var text = (ev.message && ev.message.type === 'text') ? String(ev.message.text || '').trim() : '';
+      var asked = /^(id|รหัสกลุ่ม|groupid)$/i.test(text);
+
+      if (!cur && src.groupId) {
+        setConfig_('LINE_TARGET', id, 'groupId ของกลุ่มไลน์ที่จะให้ส่งเข้า');
+        log_('line', 'lineGroupCaptured', id, 'บันทึก groupId อัตโนมัติจาก webhook');
+        lineReply_(ev.replyToken, 'เชื่อมต่อกลุ่มเรียบร้อยแล้ว\nระบบงานตัดต้นไม้ กฟส.อ่าวลึก จะส่งแจ้งเตือนเข้ากลุ่มนี้');
+      } else if (asked) {
+        log_('line', 'lineIdAsked', id, kind);
+        lineReply_(ev.replyToken, kind + 'Id ของที่นี่คือ\n' + id);
+      } else {
+        log_('line', 'lineEvent', id, kind + ' · ' + (ev.type || ''));
+      }
+    }
+  } catch (err) {
+    log_('line', 'lineWebhookError', '', String(err));
+  }
+  return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
+}
+
+/* ตอบกลับด้วย replyToken ไม่กินโควตา 200 ข้อความต่อเดือน */
+function lineReply_(replyToken, text) {
+  if (!replyToken) return false;
+  var cfg = lineCfg_();
+  if (!cfg.token) return false;
+  try {
+    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + cfg.token },
+      payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: 'text', text: text }] }),
+      muteHttpExceptions: true
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ---- ดูว่าตอนนี้ตั้งค่า LINE ครบหรือยัง รันมือได้ ---- */
+function lineStatus() {
+  var cfg = lineCfg_();
+  return [
+    'LINE_TOKEN : ' + (cfg.token ? 'ใส่แล้ว (' + cfg.token.length + ' ตัวอักษร)' : 'ยังว่าง'),
+    'LINE_TARGET: ' + (cfg.target ? cfg.target : 'ยังว่าง — พิมพ์อะไรก็ได้ในกลุ่มหนึ่งครั้ง ระบบจะจับให้เอง'),
+    'APP_URL    : ' + cfg.appUrl
+  ].join('\n');
 }
 
 /* ---- แก้รหัสฟีดเดอร์ของงานแรงสูง 115 kV ปี 2570 ให้เหมือนปี 2569 ----
