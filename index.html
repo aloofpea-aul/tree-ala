@@ -73,6 +73,7 @@ main{flex:1;padding:20px;background:var(--ground)}
 .p-warn{background:var(--warn-soft);color:#7A5A10}
 .p-bad{background:var(--bad-soft);color:#8A2E20}
 .p-gray{background:#EEECE6;color:var(--muted)}
+.p-src{background:#E8F0FE;color:#1A56C4}
 .p-mv{background:var(--pea-soft);color:var(--pea)}
 .p-hv{background:#F3E7EF;color:#7A2A5E}
 .p-lv{background:#E9F0F6;color:#2A506E}
@@ -414,7 +415,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14b';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -3392,6 +3393,26 @@ function plStatusPill(r){
   return '<span class="pill p-warn">รอจัดการ</span>';
 }
 
+/* เรื่องที่รับต่อมาจากแอป Patrol ระบบจำหน่าย */
+function plFromPatrol(r){ return String(r.SrcApp||'').trim() === 'Patrol'; }
+
+/* ดึงเรื่องต้นไม้จากแอป Patrol เข้ามาเดี๋ยวนี้ ปกติระบบไปหยิบให้เองทุก 15 นาที */
+async function patrolPullNow(){
+  const b = $('#plPullBtn');
+  if(b){ b.disabled = true; b.textContent = 'กำลังดึง…'; }
+  try{
+    const out = await tree2('patrolPull');
+    if(out.off) toast('สะพานรับเรื่องจาก Patrol ปิดอยู่');
+    else if(out.added) toast('รับเรื่องใหม่เข้ามา ' + out.added + ' เรื่อง');
+    else toast('ไม่มีเรื่องต้นไม้ใหม่จาก Patrol');
+    await patrolLoad();
+    patrolBadgeRefresh();
+  }catch(e){
+    toast(e.message || 'ดึงไม่สำเร็จ');
+    if(b){ b.disabled = false; b.textContent = 'ดึงเรื่องต้นไม้จาก Patrol เดี๋ยวนี้'; }
+  }
+}
+
 function patrolListRender(total){
   const box = $('#plBody');
   if(!box) return;
@@ -3400,6 +3421,8 @@ function patrolListRender(total){
       ${PL_FILTERS.map(([k,label]) => `<button type="button" class="plchip ${PL.filter===k?'on':''}"
         onclick="PL.filter='${k}';patrolLoad()">${esc(label)}${plCount(k)?' '+plCount(k):''}</button>`).join('')}
     </div>
+    <button type="button" class="btn ghost" id="plPullBtn" style="width:100%;height:36px;margin-bottom:10px"
+      onclick="patrolPullNow()">ดึงเรื่องต้นไม้จาก Patrol เดี๋ยวนี้</button>
     ${PL.rows.length ? `<div class="card" style="padding-top:4px">
       ${PL.rows.map(r => `
         <div class="plrow" onclick="openPatrolItem('${esc(r.PatrolID)}')">
@@ -3410,6 +3433,7 @@ function patrolListRender(total){
               ${r.DistM !== '' && r.DistM !== undefined ? `<span class="sub" style="font-weight:400"> · ${esc(r.DistM)} ม.</span>` : ''}</div>
             <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.PlaceName || r.Note || '—')}</div>
             <div class="sub">${esc(r.By || '')} · ${esc(thaiDateShort(r.Date))} ${esc(r.Time || '')}</div>
+            ${plFromPatrol(r) ? `<div style="margin-top:3px"><span class="pill p-src">มาจาก Patrol</span></div>` : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">
             <span class="pill ${String(r.Severity)==='เร่งด่วน'?'p-bad':'p-gray'}">${esc(r.Severity || 'ปกติ')}</span>
@@ -3467,6 +3491,8 @@ function patrolItemRender(extra){
       <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
         <div class="sub">ผู้แจ้ง</div><div>${esc(r.By || '')}</div>
         <div class="sub">เวลา</div><div>${esc(thaiDateShort(r.Date))} ${esc(r.Time || '')}</div>
+        ${plFromPatrol(r) ? `<div class="sub">ที่มา</div>
+          <div>Patrol ระบบจำหน่าย <span class="sub">· ${esc(r.SrcID || '')}</span></div>` : ''}
         ${matched ? `
           <div class="sub">ไลน์</div><div style="font-weight:600">${esc(r.LineCode)}</div>
           <div class="sub">สถานที่</div><div>${esc(r.PlaceName || '-')}</div>
