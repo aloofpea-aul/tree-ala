@@ -188,6 +188,14 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .cv{flex-shrink:0}
 .verline{text-align:center;margin:14px 0 2px;font-size:11px;color:var(--dim);opacity:.8;line-height:1.7}
 .bottomnav{display:none}
+/* --- ปุ่มพาโทรลต้นไม้ ลอยมุมขวาล่าง --- */
+.fab{position:fixed;right:18px;bottom:22px;z-index:85;width:56px;height:56px;border-radius:999px;
+  border:none;cursor:pointer;background:var(--pea);color:#fff;box-shadow:0 6px 18px rgba(74,29,98,.38);
+  display:flex;align-items:center;justify-content:center}
+.fab:active{transform:scale(.95)}
+.fab span{position:absolute;bottom:-16px;font-size:10px;color:var(--pea);font-weight:600;white-space:nowrap}
+@media (max-width:760px){ .fab{bottom:74px;right:14px;width:52px;height:52px} }
+@media print{ .fab{display:none} }
 @media (max-width:760px){
   /* โครงแบบแอป — ตรึงเต็มจอที่มองเห็นจริง ให้เลื่อนเฉพาะเนื้อหาข้างใน
      ไม่ใช้ 100vh เพราะบนมือถือ 100vh รวมพื้นที่ใต้แถบ URL ด้วย
@@ -360,6 +368,10 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   </div>
 </div>
 
+<button class="fab" onclick="openPatrol()" aria-label="พาโทรลต้นไม้" title="พาโทรลต้นไม้ ถ่ายรูปแจ้งเรื่อง">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+</button>
+
 <div id="diagbox" aria-live="polite"></div>
 <div id="modal"></div>
 <div id="toast"></div>
@@ -376,7 +388,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-11x';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-13a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -2006,7 +2018,10 @@ function renderPay(){
               : (lk ? '<span class="pill p-bad">ล็อกอยู่</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>')}</td>
             <td>${lk
               ? `<div class="sub" style="max-width:220px">${esc(lk)}</div>`
-              : `<button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button>`}</td>
+              : `<div style="display:flex;gap:6px;flex-wrap:wrap">
+                   <button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button>
+                   <button class="btn ghost" style="height:34px;padding:0 12px" onclick="openPayReport('${esc(p.JobID)}', ${num(p.Installment)})">รายงานเบิกจ่าย</button>
+                 </div>`}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -3051,6 +3066,464 @@ addEventListener('resize', ()=>setTimeout(screenDiag, 80));
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible' && S.data) refreshInBackground(S.year);
 });
+
+
+/* ============================================================
+   ชุดที่สอง — ปุ่มพาโทรลต้นไม้ และ รายงานเบิกจ่ายเงิน
+   เรียกหลังบ้านผ่านประตูเดียว action=tree2 แล้วแยกด้วย fn
+   ============================================================ */
+async function tree2(fn, payload = {}){
+  const out = await api('tree2', Object.assign({fn}, payload));
+  return out;
+}
+
+/* ---------- 1. พาโทรลต้นไม้ ---------- */
+let PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false };
+
+function patrolCanOpen(){ return !!(S.user && S.token); }
+
+async function openPatrol(){
+  if(!patrolCanOpen()){ toast('กรุณาเข้าสู่ระบบก่อน'); return; }
+  PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false };
+  openSheet('พาโทรลต้นไม้', 'ถ่ายรูปตรงไหนก็ได้ ระบบเทียบพิกัดกับแผนให้เอง', `
+    <div id="ptBody">
+      <div class="card"><div class="sub">กำลังขอตำแหน่งที่ตั้งจากเครื่อง…</div></div>
+    </div>`);
+  await patrolLocate();
+}
+
+async function patrolLocate(){
+  const box = $('#ptBody');
+  if(!box) return;
+  box.innerHTML = `<div class="card"><div class="sub">กำลังขอตำแหน่งที่ตั้งจากเครื่อง…</div></div>`;
+  const pos = await here();
+  if(!pos.lat){
+    box.innerHTML = `<div class="card">
+      <div style="font-weight:600;margin-bottom:6px">ยังไม่ได้ตำแหน่งที่ตั้ง</div>
+      <div class="sub">เปิดสิทธิ์ตำแหน่งที่ตั้งให้เบราว์เซอร์ก่อน แล้วกดลองใหม่</div>
+      <button class="btn" style="margin-top:12px;width:100%" onclick="patrolLocate()">ลองใหม่</button>
+    </div>`;
+    return;
+  }
+  PT.lat = pos.lat; PT.lng = pos.lng;
+  box.innerHTML = `<div class="card"><div class="sub">ได้พิกัดแล้ว กำลังเทียบกับแผนปี ${esc(S.year)}…</div></div>`;
+  try{
+    const out = await tree2('patrol', {peek:1, lat:PT.lat, lng:PT.lng, year:S.year});
+    PT.matches = out.matches || [];
+    patrolRender(out.radius || 100);
+  }catch(e){
+    box.innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div>
+      <button class="btn" style="margin-top:12px;width:100%" onclick="patrolLocate()">ลองใหม่</button></div>`;
+  }
+}
+
+function patrolRender(radius){
+  const box = $('#ptBody');
+  if(!box) return;
+  const top = PT.matches[0];
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${PT.lat},${PT.lng}`;
+
+  const head = top ? `
+    <div class="card" style="border-left:4px solid var(--ok)">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div class="kanit" style="font-size:17px">${esc(top.lineCode)}</div>
+          <div class="sub">${esc(top.placeName || '')}</div>
+        </div>
+        <span class="pill p-ok">ห่าง ${esc(top.distM)} ม.</span>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+        <div class="sub">ใบงาน</div><div style="font-weight:600">${esc(top.mjmNo || top.jobId)}</div>
+        <div class="sub">ชื่องาน</div><div>${esc(top.jobName || '-')}</div>
+        <div class="sub">ฟีดเดอร์</div><div>${esc(top.feeder || '-')} · ${esc(top.voltLevel || top.system || '')}</div>
+        <div class="sub">ผู้รับจ้าง</div><div>${esc(top.contractor || '-')}</div>
+        <div class="sub">ระยะทางแผน</div><div>${esc(top.planKm || '-')} กม.</div>
+        <div class="sub">ตัดแล้ว</div><div>${['r1','r2','r3'].map((k,i)=>
+            (top.cut[k] ? `รอบ ${i+1} ${esc(thaiDateShort(top.cut[k]))}` : '')).filter(Boolean).join(' · ') || 'ยังไม่ได้ตัดสักรอบ'}</div>
+      </div>
+      <button class="btn ghost" style="margin-top:12px;width:100%;height:38px"
+        onclick="closeSheet();openLineInfo('${esc(top.lineCode)}')">เปิดรายละเอียดไลน์นี้</button>
+    </div>` : `
+    <div class="card" style="border-left:4px solid var(--warn)">
+      <div style="font-weight:600">ไม่อยู่ในรัศมี ${esc(radius)} เมตร ของไลน์ไหนในแผนปี ${esc(S.year)}</div>
+      <div class="sub" style="margin-top:6px">แจ้งได้ตามปกติ ระบบจะเก็บเป็นข้อมูลนอกแผนไว้ให้</div>
+    </div>`;
+
+  const others = PT.matches.slice(1);
+  const more = others.length ? `
+    <div class="card">
+      <div class="plabel">ไลน์อื่นที่อยู่ใกล้</div>
+      ${others.map(m => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line2)">
+        <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600">${esc(m.lineCode)}</div>
+        <div class="sub">${esc(m.placeName||'')} · ${esc(m.mjmNo||'')}</div></div>
+        <span class="pill p-gray">${esc(m.distM)} ม.</span></div>`).join('')}
+    </div>` : '';
+
+  box.innerHTML = head + more + `
+    <div class="card">
+      <div class="plabel">รูปที่พบ</div>
+      <div id="ptPhoto">${PT.photo
+        ? `<img src="${PT.photo}" alt="รูปที่ถ่าย" style="width:100%;border-radius:10px;display:block">
+           <button class="btn ghost" style="margin-top:8px;width:100%;height:38px" onclick="patrolPick()">ถ่ายใหม่</button>`
+        : `<button class="btn" style="width:100%;height:46px" onclick="patrolPick()">ถ่ายรูป</button>`}</div>
+
+      <div class="plabel" style="margin-top:14px">ระดับเรื่อง</div>
+      <div style="display:flex;gap:8px">
+        <label class="btn ghost" style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <input type="radio" name="ptSev" value="ปกติ" checked> ปกติ</label>
+        <label class="btn ghost" style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;gap:6px">
+          <input type="radio" name="ptSev" value="เร่งด่วน"> เร่งด่วน</label>
+      </div>
+      <div class="sub" style="margin-top:6px">เร่งด่วน จะเปิดเป็นจุดที่พบในใบงานและยิงเข้ากลุ่มไลน์ทันที
+        ส่วนเรื่องปกติจะรวมส่งรอบเดียวตอนเย็น เพื่อไม่ให้เปลืองโควต้าไลน์</div>
+
+      <div class="plabel" style="margin-top:14px">หมายเหตุ</div>
+      <input class="inp" id="ptNote" placeholder="เช่น ต้นใหญ่พาดสาย ริมถนนสายบ้านบากัน" style="width:100%">
+
+      <button class="btn" id="ptSend" style="margin-top:14px;width:100%;height:46px" onclick="patrolSubmit()">ส่งเรื่อง</button>
+      <div class="sub" style="margin-top:8px;text-align:center">
+        พิกัด ${esc(PT.lat)}, ${esc(PT.lng)} · <a href="${mapLink}" target="_blank" rel="noopener">ดูบนแผนที่</a>
+      </div>
+    </div>`;
+}
+
+function patrolPick(){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
+  inp.onchange = async () => {
+    if(!inp.files || !inp.files[0]) return;
+    try{
+      toast('กำลังย่อรูป…');
+      PT.photo = await shrinkImage(inp.files[0]);
+      patrolRender();
+    }catch(e){ toast('อ่านรูปไม่สำเร็จ'); }
+  };
+  inp.click();
+}
+
+async function patrolSubmit(){
+  if(PT.busy) return;
+  if(!PT.photo){ toast('ถ่ายรูปก่อนครับ'); return; }
+  const sev = (document.querySelector('input[name="ptSev"]:checked') || {}).value || 'ปกติ';
+  const note = ($('#ptNote') && $('#ptNote').value || '').trim();
+  const btn = $('#ptSend');
+  PT.busy = true;
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังส่ง…'; }
+  try{
+    const out = await tree2('patrol', {
+      lat: PT.lat, lng: PT.lng, year: S.year,
+      photoBase64: PT.photo, severity: sev, note
+    });
+    markDirty();
+    const m = out.match;
+    $('#ptBody').innerHTML = `
+      <div class="card" style="border-left:4px solid var(--ok)">
+        <div class="kanit" style="font-size:18px">ส่งเรื่องเรียบร้อย</div>
+        <div class="sub" style="margin-top:6px">เลขที่ ${esc(out.patrolId)}</div>
+        <div style="margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+          <div class="sub">จุดที่ตรง</div><div>${m ? esc(m.lineCode) + ' · ห่าง ' + esc(m.distM) + ' ม.' : 'นอกแผน'}</div>
+          <div class="sub">ระดับ</div><div>${esc(sev)}</div>
+          <div class="sub">แจ้งเข้ากลุ่มไลน์</div><div>${out.lineSent ? 'ส่งแล้วทันที' : 'รวมส่งตอนเย็น 17:05'}</div>
+          ${out.findId ? `<div class="sub">เปิดจุดที่พบ</div><div>${esc(out.findId)}</div>` : ''}
+        </div>
+        ${out.note ? `<div class="sub" style="margin-top:10px">${esc(out.note)}</div>` : ''}
+        <button class="btn" style="margin-top:14px;width:100%" onclick="closeSheet()">ปิด</button>
+        <button class="btn ghost" style="margin-top:8px;width:100%" onclick="openPatrol()">แจ้งจุดต่อไป</button>
+      </div>`;
+  }catch(e){
+    toast(e.message, 4500);
+    if(btn){ btn.disabled = false; btn.textContent = 'ส่งเรื่อง'; }
+  }finally{ PT.busy = false; }
+}
+
+/* ---------- 2. รายงานเบิกจ่ายเงิน เอกสารแนบท้ายบันทึก ---------- */
+const PEA_SEAL = 'data:image/png;base64,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';
+
+const TH_MONTH_FULL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                       'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function thaiDate(iso){
+  const s = String(iso || '').slice(0,10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if(!m) return s || '-';
+  return Number(m[3]) + ' ' + TH_MONTH_FULL[Number(m[2])-1] + ' ' + (Number(m[1]) + 543);
+}
+const TH_MONTH_ABBR = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+                       'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function thaiDateShort(iso){
+  const s = String(iso || '').slice(0,10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if(!m) return s || '-';
+  return Number(m[3]) + ' ' + TH_MONTH_ABBR[Number(m[2])-1] + ' ' + (Number(m[1]) + 543);
+}
+
+async function openPayReport(jobId, no){
+  openSheet('รายงานเบิกจ่ายเงิน', 'งวดที่ ' + no, `
+    <div id="prBody"><div class="card"><div class="sub">กำลังรวบรวมข้อมูล…</div></div></div>`);
+  try{
+    const r = await tree2('payReport', {jobId, installment: no});
+    window.__payReport = r;
+    payReportForm(r);
+  }catch(e){
+    $('#prBody').innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+function payReportForm(r){
+  const cm = r.committee || [];
+  const needDoc = !r.docNo;
+  $('#prBody').innerHTML = `
+    <div class="card">
+      <div class="kanit" style="font-size:17px">${esc(r.job.MJMNo || r.job.JobID)}</div>
+      <div class="sub">${esc(r.job.JobName || '')}</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+        <div class="sub">งวดที่</div><div>${esc(r.installment)} · ร้อยละ ${esc(r.percent)}</div>
+        <div class="sub">จำนวนเงิน</div><div style="font-weight:600">${fmt0(r.amount)} บาท</div>
+        <div class="sub">ราคาตามสัญญา</div><div>${fmt0(r.contractPrice)} บาท</div>
+        <div class="sub">ตัดแล้ว</div><div>${esc(r.cutCount)} จาก ${esc(r.lineCount)} ไลน์</div>
+        <div class="sub">วันตรวจรับ</div><div>${esc(r.round && r.round.AcceptDate ? thaiDate(r.round.AcceptDate) : 'ยังไม่ตรวจรับ')}</div>
+        <div class="sub">เลขหนังสือ</div><div>${r.docNoFull ? esc(r.docNoFull) : '<span style="color:var(--warn)">ยังไม่ได้ออกเลข</span>'}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="plabel">คณะกรรมการตรวจรับ ปี ${esc(r.job.Year)}</div>
+      ${cm.length ? cm.map(c => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line2)">
+          <div style="flex:1"><div style="font-size:13.5px;font-weight:600">${esc(c.Name || '(ยังไม่ได้ใส่ชื่อ)')}</div>
+          <div class="sub">${esc(c.Position || '')}</div></div>
+          <span class="pill ${String(c.Role).indexOf('ประธาน')>=0 ? 'p-ok' : 'p-gray'}">${esc(c.Role)}</span>
+        </div>`).join('')
+        : '<div class="sub">ยังไม่ได้ใส่รายชื่อของปีนี้</div>'}
+      <button class="btn ghost" style="margin-top:10px;width:100%;height:38px"
+        onclick="openCommittee('${esc(r.job.Year)}')">แก้รายชื่อคณะกรรมการ</button>
+    </div>
+
+    <div class="card">
+      ${needDoc ? `
+        <button class="btn" style="width:100%;height:46px" id="prDoc" onclick="payIssueDoc('${esc(r.job.JobID)}', ${Number(r.installment)})"
+          ${r.canIssue && r.bookReady ? '' : 'disabled'}>ออกเลขหนังสือจากระบบทะเบียน</button>
+        <div class="sub" style="margin-top:8px">
+          ${!r.bookReady ? 'ยังไม่ได้ตั้งค่า BOOKNO_URL และ BOOKNO_KEY ในแท็บ Config'
+            : (!r.canIssue ? 'รอบที่ ' + esc(r.installment) + ' ยังไม่ผ่านการตรวจรับ จึงยังออกเลขไม่ได้'
+            : 'ออกเลขครั้งเดียว พิมพ์ซ้ำกี่ครั้งก็ใช้เลขเดิม')}
+        </div>` : ''}
+      <button class="btn ${needDoc ? 'ghost' : ''}" style="margin-top:${needDoc?'10px':'0'};width:100%;height:46px"
+        onclick="payPrint()">พิมพ์รายงาน</button>
+      <div class="sub" style="margin-top:8px">พิมพ์ได้โดยไม่ต้องมีเลขหนังสือ ช่องเลขที่จะเว้นว่างไว้ให้เขียนมือ</div>
+    </div>`;
+}
+
+async function payIssueDoc(jobId, no){
+  const b = $('#prDoc');
+  if(b){ b.disabled = true; b.textContent = 'กำลังขอเลข…'; }
+  try{
+    const out = await tree2('payDocNo', {jobId, no});
+    markDirty();
+    toast('ได้เลขหนังสือ ' + (out.docNoFull || out.docNo));
+    const r = await tree2('payReport', {jobId, installment: no});
+    window.__payReport = r;
+    payReportForm(r);
+  }catch(e){
+    toast(e.message, 5000);
+    if(b){ b.disabled = false; b.textContent = 'ออกเลขหนังสือจากระบบทะเบียน'; }
+  }
+}
+
+function payPrint(){
+  const r = window.__payReport;
+  if(!r){ toast('ยังไม่มีข้อมูล'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ toast('เบราว์เซอร์ปิดกั้นหน้าต่างใหม่ กรุณาอนุญาตแล้วลองอีกครั้ง'); return; }
+  w.document.write(payReportHtml(r));
+  w.document.close();
+}
+
+function payReportHtml(r){
+  const j = r.job || {};
+  const cm = (r.committee || []).filter(c => String(c.Name || '').trim() !== '');
+  const sg = r.signers || {};
+  const before = (r.photos || []).filter(p => String(p.kind).indexOf('ก่อน') >= 0).slice(0, 6);
+  const after  = (r.photos || []).filter(p => String(p.kind).indexOf('หลัง') >= 0).slice(0, 6);
+  const cut = (r.lines || []).filter(l => l.cutDate);
+
+  const sign = (name, pos, label) => `
+    <div class="sg">
+      <div class="ln">(ลงชื่อ)…………………………………………</div>
+      <div class="nm">( ${esc(name || '…………………………………………')} )</div>
+      <div class="ps">${esc(pos || '')}</div>
+      ${label ? `<div class="ps">${esc(label)}</div>` : ''}
+    </div>`;
+
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8">
+<title>รายงานเบิกจ่าย ${esc(j.MJMNo || '')} งวดที่ ${esc(r.installment)}</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "TH Sarabun New","Sarabun","Leelawadee UI","Tahoma",sans-serif;
+         font-size: 16pt; line-height: 1.5; color: #000; margin: 0; }
+  .seal { width: 26mm; display: block; margin: 0 auto 4mm; }
+  h1 { font-size: 18pt; text-align: center; margin: 0 0 2mm; font-weight: 700; }
+  .sub { text-align: center; font-size: 15pt; margin: 0 0 6mm; }
+  .docno { text-align: right; font-size: 15pt; margin-bottom: 4mm; }
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 15pt; }
+  th, td { border: 1px solid #000; padding: 1.2mm 2.2mm; vertical-align: top; }
+  th { background: #EFEAF3; font-weight: 700; text-align: center; }
+  td.n { text-align: right; }
+  td.c { text-align: center; }
+  td.nw, th.nw { white-space: nowrap; }
+  .kv td { border: none; padding: 0.8mm 0; }
+  .kv td:first-child { width: 46mm; color: #333; white-space: nowrap; }
+  h2 { font-size: 16pt; margin: 6mm 0 2mm; font-weight: 700;
+       break-after: avoid; page-break-after: avoid; }
+  tr, figure { break-inside: avoid; page-break-inside: avoid; }
+  .amt { font-weight: 700; }
+  .signs { display: flex; flex-wrap: wrap; gap: 7mm 4mm; margin-top: 9mm;
+           break-inside: avoid; page-break-inside: avoid; }
+  .sg { flex: 1 1 46%; text-align: center; font-size: 15pt;
+        break-inside: avoid; page-break-inside: avoid; }
+  .sg .ln { margin-bottom: 1.5mm; }
+  .sg .nm { }
+  .sg .ps { color: #222; }
+  .pg { page-break-before: always; }
+  .pics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .pics figure { margin: 0; }
+  .pics img { width: 100%; height: 42mm; object-fit: cover; border: 1px solid #999; }
+  .pics figcaption { font-size: 13pt; text-align: center; }
+  .note { font-size: 14pt; color: #333; }
+  @media print { .noprint { display: none; } }
+  .noprint { text-align: center; margin-bottom: 6mm; }
+  .noprint button { font: inherit; padding: 2mm 6mm; cursor: pointer; }
+</style></head><body>
+<div class="noprint"><button onclick="window.print()">สั่งพิมพ์</button></div>
+
+<img class="seal" src="${PEA_SEAL}" alt="ตราการไฟฟ้าส่วนภูมิภาค">
+<h1>เอกสารแนบท้ายบันทึก</h1>
+<div class="sub">รายงานผลการตรวจรับงานจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย<br>
+และขออนุมัติเบิกจ่ายเงิน งวดที่ ${esc(r.installment)}</div>
+<div class="docno">เลขที่ ${esc(r.docNoFull || '……………………')}${r.docDate ? ' &nbsp; ลงวันที่ ' + esc(thaiDate(r.docDate)) : ''}</div>
+
+<table class="kv">
+  <tr><td>หน่วยงาน</td><td>${esc(r.org)}</td></tr>
+  <tr><td>เลขที่ใบงาน</td><td>${esc(j.MJMNo || j.JobID)}</td></tr>
+  <tr><td>ชื่องาน</td><td>${esc(j.JobName || '')}</td></tr>
+  <tr><td>ระบบ / ระดับแรงดัน</td><td>${esc(j.System || '')} ${esc(j.VoltLevel || '')}</td></tr>
+  <tr><td>ฟีดเดอร์</td><td>${esc(j.FeederID || '')}</td></tr>
+  <tr><td>ระยะทางตามแผน</td><td>${esc(j.PlanKm || '')} กิโลเมตร</td></tr>
+  <tr><td>ผู้รับจ้าง</td><td>${esc(j.Contractor || '')}</td></tr>
+  <tr><td>เลขที่ ZPM4</td><td>${esc(j.ZPM4No || '-')}</td></tr>
+  <tr><td>วันที่ตรวจรับงาน</td><td>${esc(r.round && r.round.AcceptDate ? thaiDate(r.round.AcceptDate) : '……………………')}</td></tr>
+  <tr><td>ผู้ควบคุมงาน</td><td>${esc((r.round && r.round.Inspector) || sg.supervisorName || '……………………')}</td></tr>
+</table>
+
+<h2>๑. ผลการดำเนินงาน</h2>
+<p>ผู้รับจ้างได้ดำเนินการตัดต้นไม้ใกล้แนวระบบจำหน่ายตามใบงานข้างต้น รอบที่ ${esc(r.installment)}
+แล้วเสร็จจำนวน ${esc(r.cutCount)} ไลน์ จากทั้งหมด ${esc(r.lineCount)} ไลน์
+คณะกรรมการได้ตรวจรับงานแล้วเห็นว่าถูกต้องครบถ้วนตามรูปแบบและข้อกำหนดของการไฟฟ้าส่วนภูมิภาค</p>
+
+<h2>๒. จำนวนเงินที่ขอเบิกจ่าย</h2>
+<table>
+  <thead><tr><th style="width:18mm">งวดที่</th><th>รายการ</th><th style="width:20mm">ร้อยละ</th><th style="width:34mm">จำนวนเงิน (บาท)</th></tr></thead>
+  <tbody>
+    <tr><td class="c">${esc(r.installment)}</td>
+        <td>ค่าจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย ใบงาน ${esc(j.MJMNo || '')}</td>
+        <td class="c">${esc(r.percent)}</td>
+        <td class="n amt">${fmt(r.amount)}</td></tr>
+    <tr><td colspan="3" style="text-align:right;font-weight:700">รวมเป็นเงินทั้งสิ้น</td>
+        <td class="n amt">${fmt(r.amount)}</td></tr>
+  </tbody>
+</table>
+<p>(${esc(r.amountText)})</p>
+<p class="note">คิดจากราคาตามสัญญา ${fmt(r.contractPrice)} บาท แบ่งจ่ายสามงวด ร้อยละ 40, 40 และ 20 ตามลำดับ</p>
+
+<h2>๓. รายการไลน์ที่ดำเนินการแล้ว</h2>
+${cut.length ? `<table>
+  <thead><tr><th style="width:13mm">ลำดับ</th><th style="width:36mm">รหัสไลน์</th><th>สถานที่</th><th style="width:26mm">วันที่ตัด</th><th style="width:32mm">ผู้บันทึก</th></tr></thead>
+  <tbody>${cut.map((l,i) => `<tr><td class="c">${i+1}</td><td class="nw">${esc(l.lineCode)}</td>
+    <td>${esc(l.placeName || '')}</td><td class="c nw">${esc(thaiDateShort(l.cutDate))}</td>
+    <td class="nw">${esc(l.by || '')}</td></tr>`).join('')}</tbody></table>`
+  : '<p class="note">ยังไม่มีรายการไลน์ที่บันทึกวันตัดของรอบนี้</p>'}
+
+<h2>๔. ความเห็นของคณะกรรมการตรวจรับ</h2>
+<p>คณะกรรมการตรวจรับได้ตรวจสอบผลงานแล้ว เห็นควรอนุมัติเบิกจ่ายเงินให้แก่ผู้รับจ้างตามจำนวนข้างต้น</p>
+
+<div class="signs">
+  ${cm.length ? cm.map(c => sign(c.Name, c.Position, c.Role)).join('')
+    : sign('', '', 'ประธานกรรมการ') + sign('', '', 'กรรมการ') + sign('', '', 'กรรมการ')}
+</div>
+
+<div class="signs" style="margin-top:14mm">
+  ${sign((r.round && r.round.Inspector) || sg.supervisorName, sg.supervisorPos || 'ผู้ควบคุมงาน', '')}
+  ${sign(sg.managerName, sg.managerPos || 'ผู้จัดการ', '')}
+</div>
+
+${(before.length || after.length) ? `
+<div class="pg">
+  <h2 style="margin-top:0">ภาคผนวก ภาพถ่ายประกอบการตรวจรับ</h2>
+  ${before.length ? `<h2>ก่อนดำเนินการ</h2><div class="pics">
+    ${before.map(p => `<figure><img src="${esc(p.url)}" alt="ภาพก่อนดำเนินการ">
+      <figcaption>${esc(p.lineCode || '')}</figcaption></figure>`).join('')}</div>` : ''}
+  ${after.length ? `<h2>หลังดำเนินการ</h2><div class="pics">
+    ${after.map(p => `<figure><img src="${esc(p.url)}" alt="ภาพหลังดำเนินการ">
+      <figcaption>${esc(p.lineCode || '')}</figcaption></figure>`).join('')}</div>` : ''}
+</div>` : ''}
+
+</body></html>`;
+}
+
+/* ---------- 3. รายชื่อคณะกรรมการ แยกตามปี ---------- */
+let CMM = { year:'', rows:[] };
+
+async function openCommittee(year){
+  CMM.year = String(year || S.year);
+  openSheet('คณะกรรมการตรวจรับ', 'ปี ' + CMM.year, `<div id="cmBody"><div class="card"><div class="sub">กำลังโหลด…</div></div></div>`);
+  try{
+    const out = await tree2('committeeGet', {year: CMM.year});
+    CMM.rows = (out.rows || []).map(r => ({
+      name: r.Name || '', position: r.Position || '', role: r.Role || 'กรรมการ'
+    }));
+    if(!CMM.rows.length) CMM.rows = [{name:'',position:'',role:'ประธาน'},
+                                     {name:'',position:'',role:'กรรมการ'},
+                                     {name:'',position:'',role:'กรรมการ'}];
+    committeeRender();
+  }catch(e){ $('#cmBody').innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div></div>`; }
+}
+
+function committeeRender(){
+  $('#cmBody').innerHTML = `
+    <div class="card">
+      <div class="sub" style="margin-bottom:10px">ประธานหนึ่งคน ที่เหลือเป็นกรรมการ เพิ่มหรือลดได้ตามคำสั่งแต่งตั้งของแต่ละปี</div>
+      ${CMM.rows.map((c,i) => `
+        <div style="padding:10px 0;border-top:1px solid var(--line2)">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <span class="pill ${c.role.indexOf('ประธาน')>=0?'p-ok':'p-gray'}">คนที่ ${i+1}</span>
+            <select class="inp" style="flex:1;height:34px" onchange="CMM.rows[${i}].role=this.value;committeeRender()">
+              <option ${c.role.indexOf('ประธาน')>=0?'selected':''}>ประธาน</option>
+              <option ${c.role.indexOf('ประธาน')>=0?'':'selected'}>กรรมการ</option>
+            </select>
+            <button class="btn ghost" style="height:34px;padding:0 10px" onclick="CMM.rows.splice(${i},1);committeeRender()">ลบ</button>
+          </div>
+          <input class="inp" style="width:100%;margin-bottom:6px" placeholder="ชื่อ นามสกุล"
+            value="${esc(c.name)}" oninput="CMM.rows[${i}].name=this.value">
+          <input class="inp" style="width:100%" placeholder="ตำแหน่ง เช่น หัวหน้าแผนกปฏิบัติการระบบไฟฟ้า"
+            value="${esc(c.position)}" oninput="CMM.rows[${i}].position=this.value">
+        </div>`).join('')}
+      <button class="btn ghost" style="margin-top:12px;width:100%;height:38px"
+        onclick="CMM.rows.push({name:'',position:'',role:'กรรมการ'});committeeRender()">เพิ่มกรรมการ</button>
+      <button class="btn" style="margin-top:10px;width:100%;height:44px" onclick="committeeSave()">บันทึกรายชื่อปี ${esc(CMM.year)}</button>
+    </div>`;
+}
+
+async function committeeSave(){
+  const list = CMM.rows.filter(c => String(c.name).trim() !== '');
+  if(!list.length){ toast('ยังไม่ได้ใส่ชื่อ'); return; }
+  const chair = list.filter(c => c.role.indexOf('ประธาน') >= 0);
+  if(chair.length !== 1){ toast('ต้องมีประธานหนึ่งคนเท่านั้น'); return; }
+  try{
+    await tree2('committeeSave', {year: CMM.year, members: list});
+    markDirty();
+    toast('บันทึกรายชื่อปี ' + CMM.year + ' แล้ว');
+    closeSheet();
+  }catch(e){ toast(e.message, 4500); }
+}
 
 /* ============ เริ่มทำงาน ============ */
 (function init(){
