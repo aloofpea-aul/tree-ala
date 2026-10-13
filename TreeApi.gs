@@ -1,103 +1,111 @@
 /**
- * TreeApi.gs — ส่วนเสริมให้ระบบอื่นขอเลขหนังสือได้
- * สำหรับโครงการ "ระบบออกเลขหนังสือ กฟอ.อ่าวลึก" (V3.38)
+ * TreeApi.gs — ช่องทางให้ "ระบบงานตัดต้นไม้" ขอเลขหนังสือได้
+ * สำหรับโครงการ "ระบบออกเลขหนังสือ กฟอ.อ่าวลึก" V4.0 (ตัวที่ Deploy อยู่จริง)
  *
- * เพิ่มเป็นไฟล์ใหม่ ไม่ต้องแก้ Code.gs เดิมแม้แต่บรรทัดเดียว
- * ใช้ฟังก์ชันเดิมของระบบทั้งหมด (getOrCreateSheet, getYearInfo_,
- * nextNumFromInfo_, formatBookNumber, toYearBE_, ss_) จึงได้เลขชุดเดียวกัน
- * ไม่ซ้ำ ไม่ข้าม และเริ่มใหม่ทุกปี พ.ศ. เหมือนที่ออกผ่านหน้าเว็บ
+ * เพิ่มเป็นไฟล์ใหม่ ไม่แก้ Code.gs เดิมแม้แต่บรรทัดเดียว
  *
- * ---------- ติดตั้ง 3 ขั้น ----------
- * 1) เพิ่มไฟล์นี้ในโครงการ (+ > Script) ตั้งชื่อ TreeApi แล้วบันทึก
- * 2) เลือกฟังก์ชัน makeTreeApiKey แล้วกด Run หนึ่งครั้ง
- *    ระบบจะสร้างรหัสเชื่อมระบบให้เอง แล้วคัดลอกรหัสที่ได้
- *    ไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้
- *    (รหัสเก็บใน Script Properties ของโครงการนี้เท่านั้น ไม่อยู่ในโค้ด ไม่อยู่ในชีต)
+ * ---------- หลักความปลอดภัย ----------
+ * 1) ใช้ "รหัสเฉพาะระบบต้นไม้" คนละตัวกับรหัสสำนักงาน
+ *    ระบบต้นไม้จึงไม่ต้องรู้รหัสสำนักงาน และถ้ารหัสนี้หลุด
+ *    ก็ทำได้แค่ขอเลขหมวดทั่วไป เข้าหน้าเว็บของสำนักงานไม่ได้
+ * 2) ออกได้เฉพาะหมวด "หนังสือทั่วไป" เท่านั้น
+ *    แตะหมวดสัญญาจ้าง คำสั่ง และใบสำคัญจ่ายไม่ได้เลย
+ * 3) ใช้ LockService และตรวจเลขซ้ำทั้งปี แบบเดียวกับ saveData เดิม
+ *    เลขจึงเป็นชุดเดียวกัน ไม่ซ้ำ ไม่ข้าม
+ * 4) อ่านอย่างเดียวไม่ได้ทำอะไรกับชีตอื่น และไม่แตะการตั้งค่าระบบ
+ *
+ * ---------- ติดตั้ง ----------
+ * 1) เพิ่มไฟล์นี้ในโครงการ แล้วบันทึก
+ * 2) เลือกฟังก์ชัน makeTreeApiKey กด Run หนึ่งครั้ง
+ *    คัดลอกรหัสที่ได้ ไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้
  * 3) Deploy > Manage deployments > ดินสอ > Version: New version > Deploy
- *    ตรวจให้แน่ใจว่า  ผู้มีสิทธิ์เข้าถึง = ทุกคน (Anyone)
- *    URL เดิมไม่เปลี่ยน หน้าเว็บเดิมใช้งานได้ตามปกติ
- *
- * ---------- วิธีเรียกใช้ ----------
- * POST ไปที่ URL ของเว็บแอป  body เป็น JSON
- *
- *   ขอดูเลขถัดไป (ไม่ออกเลขจริง)
- *   { "key":"...", "action":"peek", "category":"หนังสือทั่วไป", "date":"2026-10-13" }
- *
- *   ออกเลขจริง
- *   { "key":"...", "action":"issue", "category":"หนังสือทั่วไป",
- *     "date":"2026-10-13", "subject":"...", "detail":"...",
- *     "department":"...", "recorder":"...", "amount":104400 }
- *
- * คืนค่า { ok:true, bookNum:"045", num:45, year:2569, rowIndex:123 }
+ *    URL เดิมไม่เปลี่ยน หน้าเว็บบน GitHub Pages ใช้งานได้ตามปกติ
+ * 4) เลือกฟังก์ชัน treeApiStatus กด Run เพื่อตรวจว่าพร้อมแล้ว
  */
 
 var TREE_API_KEY_PROP = 'TREE_API_KEY';
-var TREE_API_DEFAULT_CATEGORY = 'หนังสือทั่วไป';
+var TREE_ONLY_CATEGORY = 'หนังสือทั่วไป';
 
-function doPost(e) {
-  var out;
-  try {
-    var p = {};
-    if (e && e.postData && e.postData.contents) p = JSON.parse(e.postData.contents);
+/** ขึ้นทะเบียนคำสั่งใหม่เข้ากับ API เดิม — ถ้ายังไม่พร้อมจะเงียบ ไม่ทำให้ระบบเดิมพัง */
+try {
+  API_FUNCS_.treeNextDoc = treeNextDoc;
+  API_FUNCS_.treeIssueDoc = treeIssueDoc;
+} catch (e) { /* ปล่อยผ่าน ระบบเดิมทำงานต่อได้ตามปกติ */ }
 
-    var key = PropertiesService.getScriptProperties().getProperty(TREE_API_KEY_PROP);
-    if (!key) throw new Error('ยังไม่ได้ตั้ง TREE_API_KEY ใน Script Properties');
-    if (String(p.key || '') !== key) throw new Error('รหัสเชื่อมระบบไม่ถูกต้อง');
+// ====== รหัสเฉพาะระบบต้นไม้ ======
 
-    switch (String(p.action || '')) {
-      case 'ping':  out = { ok: true, app: 'BookNo API', time: new Date() }; break;
-      case 'peek':  out = treeApiPeek_(p); break;
-      case 'issue': out = treeApiIssue_(p); break;
-      default: throw new Error('ไม่รู้จักคำสั่ง: ' + p.action);
-    }
-  } catch (err) {
-    out = { ok: false, error: String(err && err.message ? err.message : err) };
+/** สร้างรหัสให้อัตโนมัติ รันครั้งเดียว แล้วคัดลอกไปใส่ BOOKNO_KEY ฝั่งระบบต้นไม้ */
+function makeTreeApiKey() {
+  var pr = props_();
+  var cur = pr.getProperty(TREE_API_KEY_PROP);
+  if (cur) {
+    return 'มีรหัสอยู่แล้ว\n\n' + cur +
+           '\n\nถ้าต้องการออกรหัสใหม่ ให้ลบคุณสมบัติ TREE_API_KEY ในการตั้งค่าโครงการก่อน';
   }
-  return ContentService.createTextOutput(JSON.stringify(out))
-    .setMimeType(ContentService.MimeType.JSON);
+  var key = 'tree-' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+  pr.setProperty(TREE_API_KEY_PROP, key);
+  return 'สร้างรหัสเรียบร้อย\n\n' + key +
+         '\n\nคัดลอกบรรทัดบนไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้';
 }
 
-/** ดูว่าเลขถัดไปคือเลขอะไร โดยไม่เขียนอะไรลงชีต */
-function treeApiPeek_(p) {
-  var category = String(p.category || TREE_API_DEFAULT_CATEGORY);
-  var sheet = ss_().getSheetByName(category);
-  var yearBE = toYearBE_(p.date) || currentYearBE_();
-  var info = getYearInfo_(sheet, category, yearBE);
-  var num = nextNumFromInfo_(category, info);
+function treeKeyOk_(k) {
+  var want = props_().getProperty(TREE_API_KEY_PROP);
+  if (!want) throw new Error('TREE_KEY_NOT_SET');
+  if (String(k || '') !== want) { failDelay_(); throw new Error('TREE_KEY_INVALID'); }
+  return true;
+}
+
+/** อนุญาตเฉพาะหมวดทั่วไป */
+function treeCat_(c) {
+  var cat = String(c || TREE_ONLY_CATEGORY).trim() || TREE_ONLY_CATEGORY;
+  if (cat !== TREE_ONLY_CATEGORY) throw new Error('CATEGORY_NOT_ALLOWED');
+  return cat;
+}
+
+// ====== คำสั่งที่เปิดให้ระบบต้นไม้เรียก ======
+
+/** ดูเลขถัดไป ไม่เขียนอะไรลงชีต */
+function treeNextDoc(apiKey, category, dateStr) {
+  treeKeyOk_(apiKey);
+  var cat = treeCat_(category);
+  var sheet = ss_().getSheetByName(cat);
+  var yearBE = toYearBE_(dateStr) || currentYearBE_();
+  var info = getYearInfo_(sheet, cat, yearBE);
+  var next = nextNumFromInfo_(cat, info);
   return {
-    ok: true, category: category, year: yearBE, num: num,
-    bookNum: formatBookNumber(category, num, yearBE),
+    ok: true, category: cat, year: yearBE, num: next,
+    bookNum: formatBookNumber(cat, next, yearBE),
     usedThisYear: info.used.size
   };
 }
 
-/** ออกเลขจริงและบันทึกลงชีตหนึ่งแถว — ใช้ Lock เหมือน saveData เดิม */
-function treeApiIssue_(p) {
-  var category = String(p.category || TREE_API_DEFAULT_CATEGORY);
+/** ออกเลขจริงและบันทึกหนึ่งแถวในแท็บ "หนังสือทั่วไป" */
+function treeIssueDoc(apiKey, p) {
+  treeKeyOk_(apiKey);
+  p = p || {};
+  var cat = treeCat_(p.category);
+
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var sheet = getOrCreateSheet(ss_(), category);
+    var sheet = getOrCreateSheet(ss_(), cat);
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     var yearBE = toYearBE_(p.date) || currentYearBE_();
-    var info = getYearInfo_(sheet, category, yearBE);
-    var num = nextNumFromInfo_(category, info);
-    var bookNum = formatBookNumber(category, num, yearBE);
+    var info = getYearInfo_(sheet, cat, yearBE);
+    var num = nextNumFromInfo_(cat, info);
+    var bookNum = formatBookNumber(cat, num, yearBE);
 
-    // ชื่อคอลัมน์ตรงกับ fieldMapping ของ saveData เดิมทุกช่อง
+    // ชื่อคอลัมน์ตรงกับ fieldMapping ของ saveData เดิม
     var map = {
       'วันที่': p.date,
       'วันเดือนปี': p.date,
       'เลขที่': bookNum,
       'หัวเรื่อง': p.subject,
-      'รายละเอียดงานจ้าง': p.subject,
       'รายละเอียดงาน': p.detail,
       'จัดซื้อจัดจ้าง': p.procurement,
-      'ประเภทงาน': p.procurement,
       'วงเงิน': p.amount,
       'ราคากลาง': p.medianPrice,
-      'ชื่อผู้รับจ้าง': p.contractor,
       'แผนก': p.department,
       'ผู้บันทึก': p.recorder
     };
@@ -113,7 +121,7 @@ function treeApiIssue_(p) {
     SpreadsheetApp.flush();
 
     return {
-      ok: true, category: category, year: yearBE, num: num,
+      ok: true, category: cat, year: yearBE, num: num,
       bookNum: bookNum, rowIndex: sheet.getLastRow()
     };
   } finally {
@@ -121,33 +129,23 @@ function treeApiIssue_(p) {
   }
 }
 
-/**
- * สร้างรหัสเชื่อมระบบให้อัตโนมัติ — รันครั้งเดียว
- * คัดลอกรหัสที่ได้ไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้
- * ถ้าอยากออกรหัสใหม่ ให้ลบคุณสมบัติ TREE_API_KEY ในการตั้งค่าโครงการก่อน
- */
-function makeTreeApiKey() {
-  var pr = PropertiesService.getScriptProperties();
-  var cur = pr.getProperty(TREE_API_KEY_PROP);
-  if (cur) {
-    return 'มีรหัสอยู่แล้ว\n\n' + cur +
-           '\n\nถ้าต้องการออกรหัสใหม่ ให้ลบคุณสมบัติ TREE_API_KEY ในการตั้งค่าโครงการก่อน';
-  }
-  var key = 'tree-' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
-  pr.setProperty(TREE_API_KEY_PROP, key);
-  return 'สร้างรหัสเรียบร้อย\n\n' + key +
-         '\n\nคัดลอกบรรทัดบนไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้';
-}
-
-/** รันมือจากเครื่องมือแก้ไข เพื่อเช็กว่าตั้งค่าครบหรือยัง */
+// ====== ตรวจสภาพ รันมือจากเครื่องมือแก้ไข ======
 function treeApiStatus() {
-  var key = PropertiesService.getScriptProperties().getProperty(TREE_API_KEY_PROP);
-  var peek = treeApiPeek_({ category: TREE_API_DEFAULT_CATEGORY });
+  var key = props_().getProperty(TREE_API_KEY_PROP);
+  var registered = false;
+  try { registered = !!(API_FUNCS_ && API_FUNCS_.treeIssueDoc); } catch (e) {}
+
+  var sheet = ss_().getSheetByName(TREE_ONLY_CATEGORY);
+  var yearBE = currentYearBE_();
+  var info = getYearInfo_(sheet, TREE_ONLY_CATEGORY, yearBE);
+  var next = nextNumFromInfo_(TREE_ONLY_CATEGORY, info);
+
   return [
-    'TREE_API_KEY : ' + (key ? 'ตั้งแล้ว (' + key.length + ' ตัวอักษร)' : 'ยังไม่ได้ตั้ง'),
-    'หมวด         : ' + peek.category,
-    'ปี พ.ศ.       : ' + peek.year,
-    'ออกไปแล้ว     : ' + peek.usedThisYear + ' เลข',
-    'เลขถัดไป      : ' + peek.bookNum
+    'รหัสเฉพาะระบบต้นไม้ : ' + (key ? 'ตั้งแล้ว (' + key.length + ' ตัวอักษร)' : 'ยังไม่ได้ตั้ง — ให้รัน makeTreeApiKey'),
+    'ขึ้นทะเบียนกับ API  : ' + (registered ? 'เรียบร้อย' : 'ยังไม่ขึ้นทะเบียน — แจ้งผมด้วย'),
+    'หมวดที่อนุญาต       : ' + TREE_ONLY_CATEGORY + ' เท่านั้น',
+    'ปี พ.ศ.              : ' + yearBE,
+    'ออกไปแล้วปีนี้       : ' + info.used.size + ' เลข',
+    'เลขถัดไป            : ' + formatBookNumber(TREE_ONLY_CATEGORY, next, yearBE)
   ].join('\n');
 }

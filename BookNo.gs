@@ -1,6 +1,6 @@
 /**
- * BookNo.gs — เชื่อมระบบงานตัดต้นไม้เข้ากับระบบออกเลขหนังสือ กฟอ.อ่าวลึก
- * เพิ่มเป็นไฟล์ใหม่ในโครงการ TreeALA_API (ไม่ต้องแก้ Code.gs ยกเว้น 1 บรรทัด)
+ * BookNo.gs — เชื่อมระบบงานตัดต้นไม้เข้ากับระบบออกเลขหนังสือ กฟอ.อ่าวลึก (V4.0)
+ * เพิ่มเป็นไฟล์ใหม่ในโครงการ TreeALA_API
  *
  * ---------- ติดตั้ง ----------
  * 1) เพิ่มไฟล์นี้ในโครงการ (+ > Script) ตั้งชื่อ BookNo แล้วบันทึก
@@ -9,14 +9,13 @@
  *    แล้วเพิ่มบรรทัดนี้ต่อท้าย
  *        case 'payDocNo':    out = apiPayDocNo_(p); break;
  * 3) เลือกฟังก์ชัน setupBookConfig แล้วกด Run หนึ่งครั้ง
- *    จะเพิ่ม 4 บรรทัดในแท็บ Config ให้เอง
- * 4) กรอกค่าในแท็บ Config
+ * 4) กรอกค่าในแท็บ Config ของชีต TreeALA_DB
  *        BOOKNO_URL   ลิงก์เว็บแอปของระบบออกเลขหนังสือ (ลงท้าย /exec)
- *        BOOKNO_KEY   รหัสเดียวกับ TREE_API_KEY ที่ตั้งไว้ฝั่งโน้น
- *        BOOKNO_DEPT  ชื่อแผนกที่จะบันทึกลงทะเบียนหนังสือ
+ *        BOOKNO_KEY   รหัสที่ได้จากการรัน makeTreeApiKey ฝั่งระบบออกเลขหนังสือ
+ *        BOOKNO_DEPT  ชื่อแผนกที่จะลงทะเบียนหนังสือ
  *        DOC_PREFIX   คำนำหน้าเลขที่ตอนพิมพ์เอกสาร เช่น ต.2อล.
  * 5) Deploy > Manage deployments > New version > Deploy
- * 6) เลือกฟังก์ชัน bookNoTest แล้วกด Run เพื่อตรวจว่าต่อติด
+ * 6) เลือกฟังก์ชัน bookNoTest กด Run เพื่อตรวจว่าต่อติด
  */
 
 // ====== ค่าตั้งต้น ======
@@ -30,7 +29,7 @@ function bookCfg_() {
   };
 }
 
-/** เติม 4 บรรทัดที่ต้องใช้ลงแท็บ Config — รันครั้งเดียว */
+/** เติมค่าที่ต้องใช้ลงแท็บ Config — รันครั้งเดียว */
 function setupBookConfig() {
   var sh = db_().getSheetByName(TABLES.config);
   if (!sh) return 'ไม่พบแท็บ Config';
@@ -39,8 +38,8 @@ function setupBookConfig() {
   for (var i = 1; i < v.length; i++) have[String(v[i][0]).trim()] = true;
   var want = [
     ['BOOKNO_URL',  '', 'ลิงก์เว็บแอปของระบบออกเลขหนังสือ ลงท้าย /exec'],
-    ['BOOKNO_KEY',  '', 'รหัสเชื่อมระบบ ต้องตรงกับ TREE_API_KEY ของระบบออกเลขหนังสือ'],
-    ['BOOKNO_DEPT', 'แผนกปฏิบัติการระบบไฟฟ้า', 'ชื่อแผนกที่จะบันทึกลงทะเบียนหนังสือ'],
+    ['BOOKNO_KEY',  '', 'รหัสจากการรัน makeTreeApiKey ฝั่งระบบออกเลขหนังสือ'],
+    ['BOOKNO_DEPT', 'แผนกปฏิบัติการระบบไฟฟ้า', 'ชื่อแผนกที่จะลงทะเบียนหนังสือ'],
     ['DOC_PREFIX',  'ต.2อล.', 'คำนำหน้าเลขที่หนังสือตอนพิมพ์เอกสาร']
   ];
   var added = [];
@@ -52,18 +51,19 @@ function setupBookConfig() {
 }
 
 // ====== เรียกไปที่ระบบออกเลขหนังสือ ======
-function bookCall_(action, payload) {
+/**
+ * ระบบออกเลขหนังสือ V4.0 รับคำสั่งแบบ { fn: 'ชื่อฟังก์ชัน', args: [...] }
+ * และตอบกลับเป็น { ok: true, data: ... } หรือ { ok: false, error: '...' }
+ */
+function bookCall_(fn, args) {
   var cfg = bookCfg_();
   if (!cfg.url) throw new Error('ยังไม่ได้ใส่ BOOKNO_URL ในแท็บ Config');
   if (!cfg.key) throw new Error('ยังไม่ได้ใส่ BOOKNO_KEY ในแท็บ Config');
 
-  var body = { key: cfg.key, action: action };
-  for (var k in payload) if (payload.hasOwnProperty(k)) body[k] = payload[k];
-
   var res = UrlFetchApp.fetch(cfg.url, {
     method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(body),
+    contentType: 'text/plain;charset=utf-8',
+    payload: JSON.stringify({ fn: fn, args: args || [] }),
     followRedirects: true,
     muteHttpExceptions: true
   });
@@ -74,14 +74,25 @@ function bookCall_(action, payload) {
     log_('system', 'bookNoHttp', String(code), text.slice(0, 300));
     throw new Error('ระบบออกเลขหนังสือตอบกลับรหัส ' + code);
   }
+
   var out;
   try { out = JSON.parse(text); }
   catch (e) {
     log_('system', 'bookNoParse', '', text.slice(0, 300));
     throw new Error('ระบบออกเลขหนังสือตอบกลับไม่ใช่ JSON — ตรวจว่า Deploy เวอร์ชันใหม่แล้วหรือยัง');
   }
-  if (!out.ok) throw new Error(out.error || 'ขอเลขหนังสือไม่สำเร็จ');
-  return out;
+
+  if (!out.ok) throw new Error(bookErrText_(out.error));
+  return out.data;
+}
+
+function bookErrText_(err) {
+  var e = String(err || '');
+  if (e.indexOf('UNKNOWN_FUNCTION') >= 0)   return 'ระบบออกเลขหนังสือยังไม่รู้จักคำสั่งนี้ — ยังไม่ได้ Deploy เวอร์ชันใหม่ หรือไฟล์ TreeApi ยังไม่ได้ขึ้นทะเบียน';
+  if (e.indexOf('TREE_KEY_NOT_SET') >= 0)   return 'ฝั่งระบบออกเลขหนังสือยังไม่ได้รัน makeTreeApiKey';
+  if (e.indexOf('TREE_KEY_INVALID') >= 0)   return 'รหัส BOOKNO_KEY ไม่ตรงกับฝั่งระบบออกเลขหนังสือ';
+  if (e.indexOf('CATEGORY_NOT_ALLOWED') >= 0) return 'ขอออกเลขได้เฉพาะหมวดหนังสือทั่วไปเท่านั้น';
+  return 'ระบบออกเลขหนังสือแจ้งว่า: ' + e;
 }
 
 // ====== ตัวช่วย ======
@@ -113,22 +124,20 @@ function roundAccepted_(jobId, no) {
   return found;
 }
 
-/** ข้อความเรื่องที่จะลงทะเบียนหนังสือ */
 function payDocSubject_(job, no) {
   return 'ขออนุมัติเบิกจ่ายเงินค่าจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย '
        + 'ใบงาน ' + String(job.MJMNo || job.JobID) + ' งวดที่ ' + no;
 }
 
 function payDocDetail_(job, no, amount) {
-  var parts = [
+  return [
     'ฟีดเดอร์ ' + String(job.FeederID || '-'),
     'ระบบ ' + String(job.VoltLevel || '-'),
     'ผู้รับจ้าง ' + String(job.Contractor || 'ยังไม่ระบุ'),
     'รอบที่ ' + no,
     'ระยะทางตามแผน ' + (parseFloat(job.PlanKm) || 0).toFixed(2) + ' กม.',
-    'จำนวนเงิน ' + Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' บาท'
-  ];
-  return parts.join(' · ');
+    'จำนวนเงิน ' + Number(amount || 0).toFixed(2) + ' บาท'
+  ].join(' · ');
 }
 
 // ====== คำสั่งหลัก: ขอเลขหนังสือของงวดเงิน ======
@@ -153,13 +162,15 @@ function apiPayDocNo_(p) {
   });
   if (!pay) throw new Error('ไม่พบงวดที่ ' + no + ' ของใบงานนี้');
 
+  var cfg = bookCfg_();
+
   // มีเลขแล้ว คืนเลขเดิม ไม่กินเลขเพิ่ม
   var existing = String(pay.DocNo || '').trim();
   if (existing && !p.peek) {
+    var yr = String(pay.DocDate || '').slice(0, 4);
     return {
-      ok: true, reused: true, docNo: existing,
-      docDate: String(pay.DocDate || ''),
-      docNoFull: bookCfg_().prefix + existing + '/' + (String(pay.DocDate || '').slice(0, 4) || ''),
+      ok: true, reused: true, docNo: existing, docDate: String(pay.DocDate || ''),
+      docNoFull: cfg.prefix + existing + (yr ? '/' + (Number(yr) + 543) : ''),
       amount: pay.Amount, percent: pay.Percent
     };
   }
@@ -172,20 +183,19 @@ function apiPayDocNo_(p) {
   var date = todayISO_();
 
   if (p.peek) {
-    var pk = bookCall_('peek', { category: 'หนังสือทั่วไป', date: date });
+    var pk = bookCall_('treeNextDoc', [cfg.key, 'หนังสือทั่วไป', date]);
     return { ok: true, peek: true, next: pk.bookNum, year: pk.year, usedThisYear: pk.usedThisYear };
   }
 
-  var got = bookCall_('issue', {
+  var got = bookCall_('treeIssueDoc', [cfg.key, {
     category:   'หนังสือทั่วไป',
     date:       date,
     subject:    payDocSubject_(job, no),
     detail:     payDocDetail_(job, no, pay.Amount),
     amount:     pay.Amount,
-    contractor: job.Contractor,
-    department: bookCfg_().dept,
+    department: cfg.dept,
     recorder:   u.name
-  });
+  }]);
 
   ensureCols_(TABLES.payments, ['DocDate']);
   updateRow_(TABLES.payments, 'PayID', pay.PayID, { DocNo: got.bookNum, DocDate: date });
@@ -195,7 +205,7 @@ function apiPayDocNo_(p) {
   return {
     ok: true, reused: false,
     docNo: got.bookNum, docDate: date, year: got.year,
-    docNoFull: bookCfg_().prefix + got.bookNum + '/' + got.year,
+    docNoFull: cfg.prefix + got.bookNum + '/' + got.year,
     amount: pay.Amount, percent: pay.Percent
   };
 }
@@ -206,14 +216,13 @@ function bookNoTest() {
   if (!cfg.url) return 'ยังไม่ได้ใส่ BOOKNO_URL ในแท็บ Config';
   if (!cfg.key) return 'ยังไม่ได้ใส่ BOOKNO_KEY ในแท็บ Config';
   try {
-    var ping = bookCall_('ping', {});
-    var peek = bookCall_('peek', { category: 'หนังสือทั่วไป', date: todayISO_() });
+    var peek = bookCall_('treeNextDoc', [cfg.key, 'หนังสือทั่วไป', todayISO_()]);
     return [
       'เชื่อมต่อสำเร็จ',
-      'ปี พ.ศ.     : ' + peek.year,
-      'ออกไปแล้ว   : ' + peek.usedThisYear + ' เลข',
-      'เลขถัดไป    : ' + peek.bookNum,
-      'พิมพ์ในเอกสารเป็น : ' + cfg.prefix + peek.bookNum + '/' + peek.year,
+      'ปี พ.ศ.            : ' + peek.year,
+      'ออกไปแล้วปีนี้      : ' + peek.usedThisYear + ' เลข',
+      'เลขถัดไป           : ' + peek.bookNum,
+      'พิมพ์ในเอกสารเป็น   : ' + cfg.prefix + peek.bookNum + '/' + peek.year,
       '',
       'ตัวนี้เป็นการดูเฉย ๆ ยังไม่ได้ออกเลขจริง'
     ].join('\n');
