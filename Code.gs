@@ -67,6 +67,7 @@ function handle_(e, p) {
       case 'delPhoto':    out = apiDelPhoto_(p); break;
       case 'fixFinding':  out = apiFixFinding_(p); break;
       case 'sldPoints':   out = apiSldPoints_(p); break;
+      case 'tree2':       out = apiTree2_(p); break;
       default:            out = { ok: false, error: 'ไม่รู้จักคำสั่ง: ' + action };
     }
   } catch (err) {
