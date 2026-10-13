@@ -17,7 +17,7 @@
 // ====== ตารางใหม่ ======
 var PATROL_COLS = ['PatrolID', 'Date', 'Time', 'By', 'Lat', 'Lng', 'PhotoUrl', 'FileID',
                    'JobID', 'LineCode', 'PlaceName', 'DistM', 'Severity', 'Note',
-                   'Status', 'FindID', 'Notified'];
+                   'Status', 'FindID', 'Notified', 'SrcApp', 'SrcID'];
 
 var COMMITTEE_COLS = ['Year', 'Seq', 'Name', 'Position', 'Role', 'Active', 'Note'];
 
@@ -33,6 +33,7 @@ function apiTree2_(p) {
     case 'patrolSummary': return apiPatrolSummary_(p);
     case 'patrolNear':    return apiPatrolNear_(p);
     case 'patrolAssign':  return apiPatrolAssign_(p);
+    case 'patrolPull':    return apiPatrolPull_(p);   // อยู่ในไฟล์ PatrolLink.gs
     case 'committeeGet':  return apiCommitteeGet_(p);
     case 'committeeSave': return apiCommitteeSave_(p);
     case 'payReport':     return apiPayReport_(p);
@@ -90,13 +91,19 @@ function patrolMatch_(lat, lng, year, radius) {
   var jobs = {};
   readTable_(TABLES.jobs).rows.forEach(function (j) { jobs[j.JobID] = j; });
 
-  var hits = [];
+  /* เก็บแค่จุดที่ใกล้ที่สุดของแต่ละไลน์ ไม่งั้นรัศมีกว้าง ๆ จะได้เป็นหมื่นจุดจนสคริปต์ล้ม */
+  var best = {};
   sldPointsCached_().forEach(function (pt) {
     var code = String(pt.id || '').replace(/\s+/g, '').toUpperCase();
-    var line = byCode[code];
-    if (!line) return;
+    if (!byCode[code]) return;
     var d = distM_(lat, lng, pt.lat, pt.lng);
     if (d > radius) return;
+    if (!best[code] || d < best[code].d) best[code] = { d: d, pt: pt };
+  });
+
+  var hits = [];
+  Object.keys(best).forEach(function (code) {
+    var d = best[code].d, pt = best[code].pt, line = byCode[code];
     var job = jobs[line.JobID] || {};
     hits.push({
       distM: d,
@@ -317,6 +324,19 @@ function patrolDigest() {
 }
 
 /** รายการพาโทรล — กรองตามปี ไลน์ หรือใบงาน */
+/** ชีตเก็บช่องเวลาเป็นค่าเวลาจริง อ่านกลับมาจะเป็นวันที่ปี 1899 จึงต้องแปลงเป็น HH:mm ก่อนส่งออก */
+function hhmm_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Bangkok', 'HH:mm');
+  var s = String(v == null ? '' : v).trim();
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : s;
+}
+
+function patrolFix_(r) {
+  if (r) r.Time = hhmm_(r.Time);
+  return r;
+}
+
 function apiPatrolList_(p) {
   requireUser_(p);
   var t = readTable_(TABLES2.patrol);
@@ -336,6 +356,7 @@ function apiPatrolList_(p) {
   if (f === 'matched') rows = rows.filter(function (r) { return String(r.JobID || '').trim() !== ''; });
   if (f === 'outplan') rows = rows.filter(function (r) { return String(r.JobID || '').trim() === ''; });
   if (f === 'closed')  rows = rows.filter(function (r) { return String(r.Status) === 'ปิดเรื่อง'; });
+  rows.forEach(patrolFix_);
   rows.sort(function (a, b) {
     return String(b.Date + b.Time).localeCompare(String(a.Date + a.Time));
   });
@@ -368,6 +389,7 @@ function apiPatrolClose_(p) {
     });
     updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId,
                { Status: 'เปิดเป็นจุดที่พบแล้ว', FindID: findId });
+    try { plkOnPromote_(cur, cur.JobID); } catch (e) {}
     log_(u.name, 'patrolPromote', p.patrolId, findId);
     bumpStamp_();
     return { ok: true, findId: findId };
@@ -379,6 +401,7 @@ function apiPatrolClose_(p) {
     Status: 'ปิดเรื่อง',
     Note: (cur.Note ? cur.Note + ' | ' : '') + 'ปิดเรื่อง: ' + why + ' (โดย ' + u.name + ')'
   });
+  try { plkOnClose_(cur, why, u.name); } catch (e) {}
   log_(u.name, 'patrolClose', p.patrolId, why);
   bumpStamp_();
   return { ok: true, reason: why };
