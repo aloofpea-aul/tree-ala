@@ -225,6 +225,88 @@ function apiPayDocNo_(p) {
   };
 }
 
+/* ============================================================
+   ออกเลขหนังสือหนึ่งเลข สำหรับรายงานรวมหลายใบงานในงวดเดียว
+   เลขที่ได้จะถูกเขียนลงทุกใบงานที่รวมอยู่ในชุดนั้น
+   กดซ้ำไม่กินเลขเพิ่ม เพราะเจอเลขเดิมแล้วคืนเลขเดิม
+   ============================================================ */
+function apiPayDocNoSet_(p) {
+  var u = requireUser_(p);
+  var ids = idList_(p.jobIds);
+  var no = parseInt(p.no || p.installment, 10) || 1;
+  if (!ids.length) throw new Error('ยังไม่ได้เลือกใบงาน');
+
+  var jobMap = {};
+  readTable_(TABLES.jobs).rows.forEach(function (j) { jobMap[j.JobID] = j; });
+  var pays = readTable_(TABLES.payments).rows;
+
+  var picked = [], miss = [], seen = {}, total = 0, year = '';
+  ids.forEach(function (id) {
+    var job = jobMap[id];
+    if (!job) { miss.push(id + ' ไม่พบใบงาน'); return; }
+    year = year || String(job.Year || '');
+    var pay = null;
+    pays.forEach(function (r) { if (r.JobID === id && String(r.Installment) === String(no)) pay = r; });
+    if (!pay) { miss.push((job.MJMNo || id) + ' ไม่มีงวดที่ ' + no); return; }
+    var rd = roundReadyInfo_(id, no);
+    if (!rd.ok) miss.push((job.MJMNo || id) + ' — ' + rd.text);
+    var dn = String(pay.DocNo || '').trim();
+    if (dn) seen[dn] = true;
+    total += parseFloat(pay.Amount) || 0;
+    picked.push({ job: job, pay: pay });
+  });
+
+  var keys = Object.keys(seen);
+  if (keys.length > 1) {
+    throw new Error('ใบงานที่เลือกมีเลขหนังสือคนละเลขอยู่แล้ว (' + keys.join(', ') +
+                    ') ออกเลขรวมให้ไม่ได้ ต้องเลือกชุดที่ยังไม่มีเลข หรือชุดที่ใช้เลขเดียวกัน');
+  }
+
+  var cfg = bookCfg_();
+
+  // มีเลขเดิมอยู่แล้ว คืนเลขเดิม ไม่กินเลขใหม่
+  if (keys.length === 1) {
+    var old = keys[0];
+    var anyDate = '';
+    picked.forEach(function (x) { if (!anyDate) anyDate = String(x.pay.DocDate || ''); });
+    var yr = anyDate.slice(0, 4);
+    return {
+      ok: true, reused: true, docNo: old, docDate: anyDate,
+      docNoFull: cfg.prefix + old + (yr ? '/' + (Number(yr) + 543) : ''),
+      count: picked.length, amount: total
+    };
+  }
+
+  if (miss.length) throw new Error('ยังออกเลขไม่ได้ — ' + miss.join(' | '));
+
+  var date = todayISO_();
+  var mjm = picked.map(function (x) { return String(x.job.MJMNo || x.job.JobID); });
+  var got = bookCall_('treeIssueDoc', [cfg.key, {
+    category:   'หนังสือทั่วไป',
+    date:       date,
+    subject:    'ขออนุมัติเบิกจ่ายเงินค่าจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย งวดที่ ' + no +
+                ' รวม ' + picked.length + ' ใบงาน',
+    detail:     'ใบงาน ' + mjm.join(', ') + ' · รวมเป็นเงิน ' + total.toFixed(2) + ' บาท',
+    amount:     total,
+    department: cfg.dept,
+    recorder:   u.name
+  }]);
+
+  ensureCols_(TABLES.payments, ['DocDate']);
+  picked.forEach(function (x) {
+    updateRow_(TABLES.payments, 'PayID', x.pay.PayID, { DocNo: got.bookNum, DocDate: date });
+  });
+  log_(u.name, 'payDocNoSet', 'งวด ' + no, got.bookNum + ' · ' + picked.length + ' ใบงาน');
+  bumpStamp_();
+
+  return {
+    ok: true, reused: false,
+    docNo: got.bookNum, docDate: date, year: got.year,
+    docNoFull: cfg.prefix + got.bookNum + '/' + got.year,
+    count: picked.length, amount: total, jobs: mjm
+  };
+}
+
 // ====== ทดสอบ รันมือจากเครื่องมือแก้ไข ======
 function bookNoTest() {
   var cfg = bookCfg_();

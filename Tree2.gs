@@ -33,7 +33,10 @@ function apiTree2_(p) {
     case 'committeeGet':  return apiCommitteeGet_(p);
     case 'committeeSave': return apiCommitteeSave_(p);
     case 'payReport':     return apiPayReport_(p);
+    case 'payGroups':     return apiPayGroups_(p);
+    case 'payReportSet':  return apiPayReportSet_(p);
     case 'payDocNo':      return apiPayDocNo_(p);     // อยู่ในไฟล์ BookNo.gs
+    case 'payDocNoSet':   return apiPayDocNoSet_(p);  // อยู่ในไฟล์ BookNo.gs
     default: throw new Error('ยังไม่รู้จักคำสั่งย่อย: ' + (fn || '(ว่าง)'));
   }
 }
@@ -503,6 +506,119 @@ function roundReadySafe_(jobId, no) {
     }
     return { ok: miss.length === 0, missing: miss, text: miss.join(' · '), round: r };
   }
+}
+
+/* ============================================================
+   ส่วนที่ 4  รายงานรวมหลายใบงานในงวดเดียว
+   เลือกได้สองทาง  ตามกลุ่มเดือนในแผน  หรือ  ติ๊กเองทีละใบ
+   ออกเลขหนังสือเลขเดียวต่อหนึ่งชุด แล้วเขียนเลขนั้นลงทุกใบที่รวมอยู่
+   ============================================================ */
+
+/** รายชื่อกลุ่มเดือนตามแผนของปีนั้น ไว้ให้หน้าเว็บทำเป็นตัวเลือก */
+function apiPayGroups_(p) {
+  requireUser_(p);
+  var year = String(p.year || '').trim();
+  var jobs = readTable_(TABLES.jobs).rows.filter(function (j) {
+    return (!year || String(j.Year) === year) && String(j.JobType || '') === 'รายปี';
+  });
+  var g = {};
+  jobs.forEach(function (j) {
+    var k = String(j.PlanMonths || '').trim() || '(ยังไม่ระบุเดือน)';
+    if (!g[k]) g[k] = { planMonths: k, monthGroup: j.MonthGroup || '', jobs: [] };
+    g[k].jobs.push(j.JobID);
+  });
+  var out = Object.keys(g).map(function (k) {
+    return { planMonths: k, monthGroup: g[k].monthGroup, count: g[k].jobs.length, jobIds: g[k].jobs };
+  });
+  out.sort(function (a, b) { return (Number(a.monthGroup) || 99) - (Number(b.monthGroup) || 99); });
+  return { ok: true, year: year, groups: out, totalJobs: jobs.length };
+}
+
+/** แปลงรายการใบงานที่ส่งมา ให้เป็นอาร์เรย์เสมอ */
+function idList_(v) {
+  if (!v) return [];
+  if (Object.prototype.toString.call(v) === '[object Array]') return v;
+  var s = String(v).trim();
+  if (s.charAt(0) === '[') { try { return JSON.parse(s); } catch (e) {} }
+  return s.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+/** ข้อมูลรายงานรวมของหลายใบงานในงวดเดียวกัน */
+function apiPayReportSet_(p) {
+  requireUser_(p);
+  var ids = idList_(p.jobIds);
+  var no = parseInt(p.installment, 10);
+  if (!ids.length) throw new Error('ยังไม่ได้เลือกใบงาน');
+  if (!(no >= 1 && no <= 3)) throw new Error('งวดต้องเป็น 1 2 หรือ 3');
+
+  var jobMap = {};
+  readTable_(TABLES.jobs).rows.forEach(function (j) { jobMap[j.JobID] = j; });
+  var rounds = readTable_(TABLES.rounds).rows;
+  var pays   = readTable_(TABLES.payments).rows;
+  var lines  = readTable_(TABLES.lines).rows;
+  var col = 'R' + no + 'Date';
+
+  var items = [], total = 0, blocked = [], docNos = {}, year = '';
+  ids.forEach(function (id) {
+    var job = jobMap[id];
+    if (!job) { blocked.push(id + ' ไม่พบใบงาน'); return; }
+    year = year || String(job.Year || '');
+
+    var rnd = null;
+    rounds.forEach(function (r) { if (r.JobID === id && String(r.RoundNo) === String(no)) rnd = r; });
+    var pay = null;
+    pays.forEach(function (r) { if (r.JobID === id && String(r.Installment) === String(no)) pay = r; });
+
+    var contract = parseFloat(job.ContractPrice) || 0;
+    var pct = pay && parseFloat(pay.Percent) ? parseFloat(pay.Percent) : PAY_PERCENT[no];
+    var amt = pay && parseFloat(pay.Amount) ? parseFloat(pay.Amount)
+                                            : Math.round(contract * pct) / 100;
+    total += amt;
+
+    var mine = lines.filter(function (l) { return l.JobID === id; });
+    var done = mine.filter(function (l) { return String(l[col] || '').trim() !== ''; });
+
+    var rd = roundReadySafe_(id, no);
+    if (!rd.ok) blocked.push((job.MJMNo || id) + ' — ' + rd.text);
+    var dn = pay ? String(pay.DocNo || '').trim() : '';
+    if (dn) docNos[dn] = true;
+
+    items.push({
+      jobId: id, mjmNo: job.MJMNo || id, jobName: job.JobName || '',
+      feeder: job.FeederID || '', voltLevel: job.VoltLevel || '', system: job.System || '',
+      contractor: job.Contractor || '', planKm: job.PlanKm || '', zpm4: job.ZPM4No || '',
+      contractPrice: contract, percent: pct, amount: amt,
+      cutCount: done.length, lineCount: mine.length,
+      acceptDate: rnd ? (rnd.AcceptDate || '') : '',
+      roundStatus: rnd ? (rnd.Status || '') : '',
+      inspector: rnd ? (rnd.Inspector || '') : '',
+      ready: rd.ok, blockReason: rd.text,
+      docNo: dn, payId: pay ? pay.PayID : ''
+    });
+  });
+
+  var cm = apiCommitteeGet_({ user: p.user, token: p.token, year: year });
+  var cfg = getConfig_();
+  var keys = Object.keys(docNos);
+  var common = keys.length === 1 ? keys[0] : '';
+  var prefix = String(cfg.DOC_PREFIX || '').trim();
+  var anyPay = null;
+  items.forEach(function (it) { if (!anyPay && it.docNo) anyPay = it; });
+
+  return {
+    ok: true,
+    installment: no, year: year,
+    items: items, count: items.length,
+    total: total, totalText: bahtText_(total),
+    committee: cm.rows, signers: cm.signers,
+    canIssue: blocked.length === 0,
+    blockReason: blocked.join(' | '),
+    mixedDocNo: keys.length > 1,
+    docNo: common,
+    docNoFull: common ? (prefix + common + (year ? '/' + year : '')) : '',
+    bookReady: !!(cfg.BOOKNO_URL && cfg.BOOKNO_KEY),
+    org: cfg.ORG_NAME || 'กฟส.อ่าวลึก'
+  };
 }
 
 /** อ่านจำนวนเงินเป็นตัวหนังสือ */

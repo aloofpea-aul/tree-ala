@@ -2011,6 +2011,13 @@ function renderPay(){
         <div class="sub">${total?((paid/total)*100).toFixed(0):0}% ของงวดทั้งหมด</div></div>
       <div class="card kpi"><div class="lbl">คงเหลือ</div><div class="n" style="color:var(--warn)">${fmt0(total-paid)}</div><div class="sub">บาท</div></div>
     </div>
+    <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <div style="flex:1;min-width:180px">
+        <div style="font-weight:600">พิมพ์รวมหลายใบงาน</div>
+        <div class="sub">เลือกตามกลุ่มเดือนในแผน หรือติ๊กเอง รวมเป็นเอกสารชุดเดียว เลขหนังสือเลขเดียว</div>
+      </div>
+      <button class="btn" style="height:42px;padding:0 18px" onclick="openPayBatch()">เลือกใบงาน</button>
+    </div>
     <div class="card" style="padding:0;overflow:auto">
       <table class="resp">
         <thead><tr><th>เลขใบงาน</th><th>ชื่องาน</th><th>ผู้รับจ้าง</th><th>งวด</th>
@@ -3421,26 +3428,7 @@ function doPrintView(){
   }
 }
 
-function payReportHtml(r){
-  const j = r.job || {};
-  const draft = !r.canIssue;                       // ยังไม่ผ่านการตรวจรับ = ฉบับร่าง
-  const cm = (r.committee || []).filter(c => String(c.Name || '').trim() !== '');
-  const sg = r.signers || {};
-  const before = (r.photos || []).filter(p => String(p.kind).indexOf('ก่อน') >= 0).slice(0, 6);
-  const after  = (r.photos || []).filter(p => String(p.kind).indexOf('หลัง') >= 0).slice(0, 6);
-  const cut = (r.lines || []).filter(l => l.cutDate);
-
-  const sign = (name, pos, label) => `
-    <div class="sg">
-      <div class="ln">(ลงชื่อ)…………………………………………</div>
-      <div class="nm">( ${esc(name || '…………………………………………')} )</div>
-      <div class="ps">${esc(pos || '')}</div>
-      ${label ? `<div class="ps">${esc(label)}</div>` : ''}
-    </div>`;
-
-  return `<!doctype html><html lang="th"><head><meta charset="utf-8">
-<title>รายงานเบิกจ่าย ${esc(j.MJMNo || '')} งวดที่ ${esc(r.installment)}</title>
-<style>
+function payReportCss(){ return `
   @page { size: A4; margin: 18mm 18mm 16mm; }
   * { box-sizing: border-box; }
   body { font-family: "TH Sarabun New","Sarabun","Leelawadee UI","Tahoma",sans-serif;
@@ -3483,7 +3471,28 @@ function payReportHtml(r){
                          background: #fff; box-shadow: 0 0 0 100vmax #EFECE5; } }
   .noprint { text-align: center; margin-bottom: 6mm; }
   .noprint button { font: inherit; padding: 2mm 6mm; cursor: pointer; }
-</style></head><body>
+`; }
+
+function payReportHtml(r){
+  const j = r.job || {};
+  const draft = !r.canIssue;                       // ยังไม่ผ่านการตรวจรับ = ฉบับร่าง
+  const cm = (r.committee || []).filter(c => String(c.Name || '').trim() !== '');
+  const sg = r.signers || {};
+  const before = (r.photos || []).filter(p => String(p.kind).indexOf('ก่อน') >= 0).slice(0, 6);
+  const after  = (r.photos || []).filter(p => String(p.kind).indexOf('หลัง') >= 0).slice(0, 6);
+  const cut = (r.lines || []).filter(l => l.cutDate);
+
+  const sign = (name, pos, label) => `
+    <div class="sg">
+      <div class="ln">(ลงชื่อ)…………………………………………</div>
+      <div class="nm">( ${esc(name || '…………………………………………')} )</div>
+      <div class="ps">${esc(pos || '')}</div>
+      ${label ? `<div class="ps">${esc(label)}</div>` : ''}
+    </div>`;
+
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8">
+<title>รายงานเบิกจ่าย ${esc(j.MJMNo || '')} งวดที่ ${esc(r.installment)}</title>
+<style>${payReportCss()}</style></head><body>
 <div class="noprint"><button onclick="window.print()">สั่งพิมพ์</button></div>
 
 <img class="seal" src="${PEA_SEAL}" alt="การไฟฟ้าส่วนภูมิภาค">
@@ -3557,6 +3566,336 @@ ${(before.length || after.length) ? `
     ${after.map(p => `<figure><img src="${esc(p.url)}" alt="ภาพหลังดำเนินการ">
       <figcaption>${esc(p.lineCode || '')}</figcaption></figure>`).join('')}</div>` : ''}
 </div>` : ''}
+
+</body></html>`;
+}
+
+/* ============================================================
+   รายงานรวมหลายใบงานในงวดเดียว
+   เลือกได้สองทาง  ตามกลุ่มเดือนในแผน  หรือ  ติ๊กเองทีละใบ
+   ============================================================ */
+let BAT = { no: 1, mode: 'group', group: '', picked: {}, data: null, busy: false };
+
+function openPayBatch(){
+  const d = S.data;
+  if(!d || !d.jobs){ toast('ยังไม่มีข้อมูล'); return; }
+  BAT = { no: 1, mode: 'group', group: '', picked: {}, data: null, busy: false };
+  const g = batGroups();
+  BAT.group = g.length ? g[0].planMonths : '';
+  batApplyGroup();
+  openSheet('พิมพ์รวมหลายใบงาน', 'ปี ' + S.year, `<div id="batBody"></div>`);
+  batRender();
+}
+
+/* จัดกลุ่มใบงานรายปีตามเดือนในแผน ใช้ข้อมูลที่โหลดมาแล้วในเครื่อง */
+function batGroups(){
+  const g = {};
+  (S.data.jobs||[]).forEach(j => {
+    if(String(j.JobType||'') !== 'รายปี') return;
+    const k = String(j.PlanMonths||'').trim() || '(ยังไม่ระบุเดือน)';
+    if(!g[k]) g[k] = { planMonths:k, monthGroup:j.MonthGroup||'', jobs:[] };
+    g[k].jobs.push(j);
+  });
+  return Object.keys(g).map(k => g[k])
+    .sort((a,b) => (num(a.monthGroup)||99) - (num(b.monthGroup)||99));
+}
+
+function batJobList(){
+  return (S.data.jobs||[]).filter(j => String(j.JobType||'') === 'รายปี')
+    .sort((a,b) => String(a.MJMNo||'').localeCompare(String(b.MJMNo||'')));
+}
+
+function batApplyGroup(){
+  BAT.picked = {};
+  const g = batGroups().find(x => x.planMonths === BAT.group);
+  if(g) g.jobs.forEach(j => BAT.picked[j.JobID] = true);
+}
+
+function batPickedIds(){ return Object.keys(BAT.picked).filter(k => BAT.picked[k]); }
+
+function batAmountOf(jobId){
+  const p = (S.data.payments||[]).find(x => x.JobID === jobId && num(x.Installment) === num(BAT.no));
+  if(p && num(p.Amount)) return num(p.Amount);
+  const j = (S.data.jobs||[]).find(x => x.JobID === jobId) || {};
+  const pct = p && num(p.Percent) ? num(p.Percent) : (BAT.no === 3 ? 20 : 40);
+  return Math.round(num(j.ContractPrice) * pct) / 100;
+}
+
+function batRender(){
+  const groups = batGroups();
+  const jobs = batJobList();
+  const ids = batPickedIds();
+  const sum = ids.reduce((a,id) => a + batAmountOf(id), 0);
+  const notReady = ids.filter(id => !roundReady(id, BAT.no).ok);
+
+  $('#batBody').innerHTML = `
+    <div class="card">
+      <div class="plabel">งวดที่</div>
+      <div style="display:flex;gap:8px">
+        ${[1,2,3].map(n => `<button class="btn ${BAT.no===n?'':'ghost'}" style="flex:1;height:40px"
+            onclick="BAT.no=${n};batRender()">งวดที่ ${n}</button>`).join('')}
+      </div>
+
+      <div class="plabel" style="margin-top:14px">เลือกใบงานจาก</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn ${BAT.mode==='group'?'':'ghost'}" style="flex:1;height:40px"
+          onclick="BAT.mode='group';batApplyGroup();batRender()">กลุ่มเดือนตามแผน</button>
+        <button class="btn ${BAT.mode==='pick'?'':'ghost'}" style="flex:1;height:40px"
+          onclick="BAT.mode='pick';batRender()">ติ๊กเอง</button>
+      </div>
+
+      ${BAT.mode==='group' ? `
+        <select class="inp" style="width:100%;margin-top:10px;height:42px"
+          onchange="BAT.group=this.value;batApplyGroup();batRender()">
+          ${groups.map(g => `<option value="${esc(g.planMonths)}" ${g.planMonths===BAT.group?'selected':''}>
+              ${esc(g.planMonths)} · ${g.jobs.length} ใบงาน</option>`).join('')}
+        </select>
+        <div class="sub" style="margin-top:8px">เลือกกลุ่มแล้วระบบติ๊กใบงานในกลุ่มให้ทั้งหมด
+          สลับไปโหมดติ๊กเองเพื่อตัดบางใบออกได้</div>` : `
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(true)">เลือกทั้งหมด</button>
+          <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(false)">ล้างทั้งหมด</button>
+        </div>`}
+    </div>
+
+    ${BAT.mode==='pick' ? `
+    <div class="card" style="max-height:46vh;overflow:auto">
+      ${jobs.map(j => {
+        const on = !!BAT.picked[j.JobID];
+        const rd = roundReady(j.JobID, BAT.no);
+        return `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line2);cursor:pointer">
+          <input type="checkbox" ${on?'checked':''} style="margin-top:3px"
+            onchange="BAT.picked['${esc(j.JobID)}']=this.checked;batRender()">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(j.MJMNo||j.JobID)}
+              <span class="sub" style="font-weight:400"> · ${esc(j.FeederID||'')}</span></div>
+            <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(j.JobName||'')}</div>
+            ${rd.ok ? '' : `<div class="sub" style="color:var(--warn)">${esc(rd.text)}</div>`}
+          </div>
+          <div style="text-align:right;font-size:13px;font-weight:600;white-space:nowrap">${fmt0(batAmountOf(j.JobID))}</div>
+        </label>`;
+      }).join('')}
+    </div>` : ''}
+
+    <div class="card">
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px">
+        <div class="sub">เลือกไว้</div><div style="font-weight:600">${ids.length} ใบงาน</div>
+        <div class="sub">รวมเป็นเงิน</div><div style="font-weight:600">${fmt0(sum)} บาท</div>
+        <div class="sub">ตรวจรับครบ</div><div>${notReady.length
+          ? `<span style="color:var(--warn)">ยังไม่ครบ ${notReady.length} ใบงาน</span>`
+          : '<span style="color:var(--ok)">ครบทุกใบ</span>'}</div>
+      </div>
+      <button class="btn" style="margin-top:14px;width:100%;height:46px" id="batGo"
+        onclick="batOpen()" ${ids.length ? '' : 'disabled'}>ดูรายงานรวม ${ids.length} ใบงาน</button>
+      <div class="sub" style="margin-top:8px">${notReady.length
+        ? 'มีใบงานที่ยังตรวจรับไม่ครบ จะได้เป็นฉบับร่างและยังออกเลขหนังสือไม่ได้'
+        : 'เอกสารชุดนี้ใช้เลขหนังสือเลขเดียว ลงชื่อกรรมการชุดเดียว'}</div>
+    </div>`;
+}
+
+function batAll(on){
+  BAT.picked = {};
+  if(on) batJobList().forEach(j => BAT.picked[j.JobID] = true);
+  batRender();
+}
+
+async function batOpen(){
+  const ids = batPickedIds();
+  if(!ids.length){ toast('ยังไม่ได้เลือกใบงาน'); return; }
+  const b = $('#batGo');
+  if(b){ b.disabled = true; b.textContent = 'กำลังรวบรวมข้อมูล…'; }
+  try{
+    const r = await tree2('payReportSet', {jobIds: JSON.stringify(ids), installment: BAT.no});
+    BAT.data = r;
+    window.__paySet = r;
+    batForm(r);
+  }catch(e){
+    toast(e.message, 5000);
+    if(b){ b.disabled = false; b.textContent = 'ดูรายงานรวม ' + ids.length + ' ใบงาน'; }
+  }
+}
+
+function batForm(r){
+  const draft = !r.canIssue;
+  const needDoc = !r.docNo;
+  $('#batBody').innerHTML = `
+    ${draft ? `<div class="card" style="border-left:4px solid var(--warn);background:var(--warn-soft)">
+        <div style="font-weight:600">พิมพ์ได้เฉพาะฉบับร่าง</div>
+        <div class="sub" style="margin-top:4px">${esc(r.blockReason)}</div>
+      </div>` : ''}
+    ${r.mixedDocNo ? `<div class="card" style="border-left:4px solid var(--bad)">
+        <div style="font-weight:600">ใบงานที่เลือกมีเลขหนังสือคนละเลข</div>
+        <div class="sub" style="margin-top:4px">ออกเลขรวมให้ไม่ได้ เลือกชุดที่ยังไม่มีเลข หรือชุดที่ใช้เลขเดียวกัน</div>
+      </div>` : ''}
+
+    <div class="card">
+      <div class="kanit" style="font-size:17px">รายงานรวม งวดที่ ${esc(r.installment)}</div>
+      <div class="sub">${esc(r.count)} ใบงาน · ปี ${esc(r.year)}</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+        <div class="sub">รวมเป็นเงิน</div><div style="font-weight:600">${fmt0(r.total)} บาท</div>
+        <div class="sub">เลขหนังสือ</div><div>${r.docNoFull ? esc(r.docNoFull)
+          : '<span style="color:var(--warn)">ยังไม่ได้ออกเลข</span>'}</div>
+      </div>
+      <div style="margin-top:12px;max-height:34vh;overflow:auto">
+        ${r.items.map((it,i) => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line2)">
+          <div class="ic-n">${i+1}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(it.mjmNo)}
+              <span class="sub" style="font-weight:400"> · ${esc(it.feeder)}</span></div>
+            <div class="sub">${esc(it.contractor||'ยังไม่ระบุผู้รับจ้าง')} · ตัดแล้ว ${esc(it.cutCount)}/${esc(it.lineCount)} ไลน์</div>
+            ${it.ready ? '' : `<div class="sub" style="color:var(--warn)">${esc(it.blockReason)}</div>`}
+          </div>
+          <div style="text-align:right;font-size:13px;font-weight:600;white-space:nowrap">${fmt0(it.amount)}</div>
+        </div>`).join('')}
+      </div>
+      <button class="btn ghost" style="margin-top:12px;width:100%;height:38px" onclick="batRender()">กลับไปเลือกใหม่</button>
+    </div>
+
+    <div class="card">
+      ${needDoc ? `
+        <button class="btn" style="width:100%;height:46px" id="batDoc" onclick="batIssueDoc()"
+          ${(!draft && r.bookReady && !r.mixedDocNo) ? '' : 'disabled'}>ออกเลขหนังสือหนึ่งเลขให้ทั้งชุด</button>
+        <div class="sub" style="margin-top:8px">${!r.bookReady
+          ? 'ยังไม่ได้ตั้งค่า BOOKNO_URL และ BOOKNO_KEY ในแท็บ Config'
+          : (draft ? 'ต้องตรวจรับให้ครบทุกใบก่อน' : 'หนึ่งชุดหนึ่งเลข เลขเดียวกันจะถูกเขียนลงทุกใบงานในชุด')}</div>` : ''}
+      <button class="btn ${needDoc ? 'ghost' : ''}" style="margin-top:${needDoc?'10px':'0'};width:100%;height:46px"
+        onclick="batPrint()">${draft ? 'พิมพ์ฉบับร่าง' : 'พิมพ์รายงานรวม'}</button>
+    </div>`;
+}
+
+async function batIssueDoc(){
+  const r = BAT.data;
+  const b = $('#batDoc');
+  if(b){ b.disabled = true; b.textContent = 'กำลังขอเลข…'; }
+  try{
+    const out = await tree2('payDocNoSet', {jobIds: JSON.stringify(r.items.map(x=>x.jobId)), no: r.installment});
+    markDirty();
+    toast('ได้เลขหนังสือ ' + (out.docNoFull || out.docNo));
+    const fresh = await tree2('payReportSet', {jobIds: JSON.stringify(r.items.map(x=>x.jobId)), installment: r.installment});
+    BAT.data = fresh; window.__paySet = fresh;
+    batForm(fresh);
+  }catch(e){
+    toast(e.message, 6000);
+    if(b){ b.disabled = false; b.textContent = 'ออกเลขหนังสือหนึ่งเลขให้ทั้งชุด'; }
+  }
+}
+
+function batPrint(){
+  const r = BAT.data;
+  if(!r){ toast('ยังไม่มีข้อมูล'); return; }
+  const draft = !r.canIssue;
+  closePrintView();
+  const box = el(`
+    <div id="printView">
+      <div class="pvbar">
+        <button type="button" class="pvclose" onclick="closePrintView()" aria-label="ปิด">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          ปิด
+        </button>
+        <div class="pvtitle">${draft ? 'ฉบับร่าง' : 'รายงานรวม'} · งวดที่ ${esc(r.installment)} · ${esc(r.count)} ใบงาน</div>
+        <button type="button" class="pvprint" onclick="doPrintView()">สั่งพิมพ์</button>
+      </div>
+      <iframe id="pvFrame" title="รายงานเบิกจ่ายรวม"></iframe>
+    </div>`);
+  document.body.appendChild(box);
+  document.body.style.overflow = 'hidden';
+  const f = box.querySelector('#pvFrame');
+  f.addEventListener('load', () => {
+    try{ f.contentDocument.querySelectorAll('.noprint').forEach(e => e.remove()); }catch(e){}
+  });
+  f.srcdoc = paySetHtml(r);
+  window.addEventListener('keydown', pvEsc);
+  history.pushState({pv:1}, '');
+  window.addEventListener('popstate', pvPop);
+}
+
+/* ---------- เอกสารรวม ---------- */
+function paySetHtml(r){
+  const draft = !r.canIssue;
+  const cm = (r.committee || []).filter(c => String(c.Name || '').trim() !== '');
+  const sg = r.signers || {};
+  const km = r.items.reduce((a,x) => a + num(x.planKm), 0);
+  const cut = r.items.reduce((a,x) => a + num(x.cutCount), 0);
+  const all = r.items.reduce((a,x) => a + num(x.lineCount), 0);
+  const contractors = {};
+  r.items.forEach(x => { if(x.contractor) contractors[x.contractor] = (contractors[x.contractor]||0) + 1; });
+  const accDates = r.items.map(x => x.acceptDate).filter(Boolean).sort();
+
+  const sign = (name, pos, label) => `
+    <div class="sg">
+      <div class="ln">(ลงชื่อ)…………………………………………</div>
+      <div class="nm">( ${esc(name || '…………………………………………')} )</div>
+      <div class="ps">${esc(pos || '')}</div>
+      ${label ? `<div class="ps">${esc(label)}</div>` : ''}
+    </div>`;
+
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8">
+<title>รายงานเบิกจ่ายรวม งวดที่ ${esc(r.installment)}</title>
+<style>${payReportCss()}</style></head><body>
+<div class="noprint"><button onclick="window.print()">สั่งพิมพ์</button></div>
+
+<img class="seal" src="${PEA_SEAL}" alt="การไฟฟ้าส่วนภูมิภาค">
+<h1>เอกสารแนบท้ายบันทึก</h1>
+<div class="sub">รายงานผลการตรวจรับงานจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย<br>
+และขออนุมัติเบิกจ่ายเงิน งวดที่ ${esc(r.installment)} รวม ${esc(r.count)} ใบงาน</div>
+${draft ? `<div class="draftnote">ฉบับร่าง — ${esc(r.blockReason)} ใช้ตั้งเบิกไม่ได้</div>` : ''}
+<div class="docno">${draft ? '<b style="color:#B4402E">ฉบับร่าง</b> &nbsp; ' : ''}เลขที่ ${esc(r.docNoFull || '……………………')}</div>
+
+<table class="kv">
+  <tr><td>หน่วยงาน</td><td>${esc(r.org)}</td></tr>
+  <tr><td>ปีงบประมาณ</td><td>${esc(r.year)}</td></tr>
+  <tr><td>จำนวนใบงาน</td><td>${esc(r.count)} ใบงาน</td></tr>
+  <tr><td>ระยะทางตามแผนรวม</td><td>${fmt(km)} กิโลเมตร</td></tr>
+  <tr><td>ผู้รับจ้าง</td><td>${esc(Object.keys(contractors).map(k => k + ' (' + contractors[k] + ' ใบงาน)').join(' · ') || '-')}</td></tr>
+  <tr><td>วันที่ตรวจรับงาน</td><td>${accDates.length
+      ? (accDates[0] === accDates[accDates.length-1]
+          ? esc(thaiDate(accDates[0]))
+          : esc(thaiDate(accDates[0])) + ' ถึง ' + esc(thaiDate(accDates[accDates.length-1])))
+      : '……………………'}</td></tr>
+  <tr><td>ผู้ควบคุมงาน</td><td>${esc(sg.supervisorName || '……………………')}</td></tr>
+</table>
+
+<h2>๑. ผลการดำเนินงาน</h2>
+<p>ผู้รับจ้างได้ดำเนินการตัดต้นไม้ใกล้แนวระบบจำหน่ายตามใบงานที่ปรากฏในข้อ ๒ รอบที่ ${esc(r.installment)}
+รวม ${esc(r.count)} ใบงาน ระยะทางตามแผนรวม ${fmt(km)} กิโลเมตร
+${all ? 'ดำเนินการแล้วเสร็จ ' + esc(cut) + ' ไลน์ จากทั้งหมด ' + esc(all) + ' ไลน์ ' : ''}คณะกรรมการได้ตรวจรับงานแล้ว
+เห็นว่าถูกต้องครบถ้วนตามรูปแบบและข้อกำหนดของการไฟฟ้าส่วนภูมิภาค</p>
+
+<h2>๒. รายละเอียดใบงานและจำนวนเงินที่ขอเบิกจ่าย</h2>
+<table>
+  <thead><tr>
+    <th style="width:11mm">ที่</th><th style="width:28mm">เลขที่ใบงาน</th>
+    <th>ชื่องาน</th><th style="width:20mm" class="nw">ฟีดเดอร์</th>
+    <th style="width:28mm">ผู้รับจ้าง</th><th style="width:15mm">ร้อยละ</th>
+    <th style="width:28mm">จำนวนเงิน<br>(บาท)</th></tr></thead>
+  <tbody>
+    ${r.items.map((it,i) => `<tr>
+      <td class="c">${i+1}</td>
+      <td class="nw">${esc(it.mjmNo)}</td>
+      <td>${esc(it.jobName)}</td>
+      <td class="c nw">${esc(it.feeder)}</td>
+      <td>${esc(it.contractor || '-')}</td>
+      <td class="c">${esc(it.percent)}</td>
+      <td class="n">${fmt(it.amount)}</td></tr>`).join('')}
+    <tr><td colspan="6" style="text-align:right;font-weight:700">รวมเป็นเงินทั้งสิ้น</td>
+        <td class="n amt">${fmt(r.total)}</td></tr>
+  </tbody>
+</table>
+<p>(${esc(r.totalText)})</p>
+<p class="note">จำนวนเงินแต่ละใบงานคิดจากราคาตามสัญญาของใบงานนั้น แบ่งจ่ายสามงวด ร้อยละ 40, 40 และ 20 ตามลำดับ</p>
+
+<h2>๓. ความเห็นของคณะกรรมการตรวจรับ</h2>
+<p>คณะกรรมการตรวจรับได้ตรวจสอบผลงานทุกใบงานข้างต้นแล้ว เห็นควรอนุมัติเบิกจ่ายเงินให้แก่ผู้รับจ้างตามจำนวนข้างต้น</p>
+
+<div class="signs">
+  ${cm.length ? cm.map(c => sign(c.Name, c.Position, c.Role)).join('')
+    : sign('', '', 'ประธานกรรมการ') + sign('', '', 'กรรมการ') + sign('', '', 'กรรมการ')}
+</div>
+
+<div class="signs" style="margin-top:9mm">
+  ${sign(sg.supervisorName, sg.supervisorPos || 'ผู้ควบคุมงาน', '')}
+  ${sign(sg.managerName, sg.managerPos || 'ผู้จัดการ', '')}
+</div>
 
 </body></html>`;
 }
