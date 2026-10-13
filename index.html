@@ -3373,12 +3373,13 @@ function payReportHtml(r){
   td.c { text-align: center; }
   td.nw, th.nw { white-space: nowrap; }
   .kv td { border: none; padding: 0.8mm 0; }
-  .kv td:first-child { width: 46mm; color: #333; white-space: nowrap; }
-  h2 { font-size: 16pt; margin: 6mm 0 2mm; font-weight: 700;
+  .kv td:first-child { width: 46mm; padding-right: 5mm; color: #333; white-space: nowrap; }
+  h2 { font-size: 16pt; margin: 5mm 0 1.5mm; font-weight: 700;
        break-after: avoid; page-break-after: avoid; }
+  p { margin: 2mm 0; }
   tr, figure { break-inside: avoid; page-break-inside: avoid; }
   .amt { font-weight: 700; }
-  .signs { display: flex; flex-wrap: wrap; gap: 7mm 4mm; margin-top: 9mm;
+  .signs { display: flex; flex-wrap: wrap; gap: 6mm 4mm; margin-top: 7mm;
            break-inside: avoid; page-break-inside: avoid; }
   .sg { flex: 1 1 46%; text-align: center; font-size: 15pt;
         break-inside: avoid; page-break-inside: avoid; }
@@ -3454,7 +3455,7 @@ ${cut.length ? `<table>
     : sign('', '', 'ประธานกรรมการ') + sign('', '', 'กรรมการ') + sign('', '', 'กรรมการ')}
 </div>
 
-<div class="signs" style="margin-top:14mm">
+<div class="signs" style="margin-top:9mm">
   ${sign((r.round && r.round.Inspector) || sg.supervisorName, sg.supervisorPos || 'ผู้ควบคุมงาน', '')}
   ${sign(sg.managerName, sg.managerPos || 'ผู้จัดการ', '')}
 </div>
