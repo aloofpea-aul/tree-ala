@@ -30,6 +30,9 @@ function apiTree2_(p) {
     case 'patrol':        return apiPatrol_(p);
     case 'patrolList':    return apiPatrolList_(p);
     case 'patrolClose':   return apiPatrolClose_(p);
+    case 'patrolSummary': return apiPatrolSummary_(p);
+    case 'patrolNear':    return apiPatrolNear_(p);
+    case 'patrolAssign':  return apiPatrolAssign_(p);
     case 'committeeGet':  return apiCommitteeGet_(p);
     case 'committeeSave': return apiCommitteeSave_(p);
     case 'payReport':     return apiPayReport_(p);
@@ -214,6 +217,17 @@ function apiPatrol_(p) {
   };
 }
 
+
+/** ลิงก์เปิดแอป ให้เด้งออกจากเบราว์เซอร์ในตัวไลน์ ไปเบราว์เซอร์จริงของเครื่อง
+    openExternalBrowser=1 เป็นคำสั่งของไลน์เอง ใช้ได้ทั้งแอนดรอยด์และไอโฟน */
+function appLink_(query) {
+  var base = String(lineCfg_().appUrl || '').trim();
+  if (!base) return '';
+  var join = base.indexOf('?') >= 0 ? '&' : '?';
+  var q = String(query || '').replace(/^[?&]/, '');
+  return base + join + (q ? q + '&' : '') + 'openExternalBrowser=1';
+}
+
 /** การ์ดไลน์ของเรื่องเร่งด่วน รวมรูปไว้ในการ์ดเดียว ประหยัดโควต้า */
 function patrolPush_(row, top) {
   var rows = [
@@ -234,7 +248,13 @@ function patrolPush_(row, top) {
 
   var msgs = lineFlex_('พาโทรลพบจุดเร่งด่วน', 'พาโทรลพบจุดเร่งด่วน', '#C0392B',
     top ? (top.lineCode + ' ' + (top.placeName || '')) : 'จุดนอกแผน',
-    'ถ่ายจากการพาโทรล ต้องดำเนินการต่อ', rows, 'เปิดระบบงานตัดต้นไม้');
+    'ถ่ายจากการพาโทรล ต้องดำเนินการต่อ', rows, 'เปิดเรื่องนี้ในแอป');
+
+  /* ให้ปุ่มพาเข้าหน้ารายละเอียดของเรื่องนี้เลย ไม่ใช่หน้าแรก */
+  try {
+    var link = appLink_('patrol=' + row.PatrolID);
+    if (link) msgs[0].contents.footer.contents[0].action.uri = link;
+  } catch (e) {}
 
   /* แนบรูปในข้อความเดียวกัน — LINE นับเป็น 1 ข้อความต่อคน ไม่ใช่ 2 */
   if (row.FileID) {
@@ -280,7 +300,11 @@ function patrolDigest() {
   var msgs = lineFlex_('สรุปพาโทรลวันนี้', 'สรุปพาโทรลต้นไม้วันนี้', '#4A1D62',
     'พบ ' + wait.length + ' จุด',
     'ผู้พาโทรล ' + Object.keys(people).join(', ') + ' · รวมส่งรอบเดียวเพื่อประหยัดโควต้า',
-    rows, 'ดูรายละเอียดในระบบ');
+    rows, 'เปิดรายการพาโทรล');
+  try {
+    var dlink = appLink_('view=patrol');
+    if (dlink) msgs[0].contents.footer.contents[0].action.uri = dlink;
+  } catch (e) {}
   var ok = linePush_(msgs);
 
   if (ok) {
@@ -303,6 +327,15 @@ function apiPatrolList_(p) {
            String(p.lineCode).replace(/\s+/g, '').toUpperCase();
   });
   if (p.openOnly) rows = rows.filter(function (r) { return String(r.Status) === 'แจ้งแล้ว'; });
+  var f = String(p.filter || '').trim();
+  if (f === 'waiting') rows = rows.filter(function (r) {
+    var st = String(r.Status || ''); return st !== 'ปิดเรื่อง' && st !== 'เปิดเป็นจุดที่พบแล้ว'; });
+  if (f === 'urgent')  rows = rows.filter(function (r) {
+    var st = String(r.Status || '');
+    return String(r.Severity || '') === 'เร่งด่วน' && st !== 'ปิดเรื่อง'; });
+  if (f === 'matched') rows = rows.filter(function (r) { return String(r.JobID || '').trim() !== ''; });
+  if (f === 'outplan') rows = rows.filter(function (r) { return String(r.JobID || '').trim() === ''; });
+  if (f === 'closed')  rows = rows.filter(function (r) { return String(r.Status) === 'ปิดเรื่อง'; });
   rows.sort(function (a, b) {
     return String(b.Date + b.Time).localeCompare(String(a.Date + a.Time));
   });
@@ -340,11 +373,89 @@ function apiPatrolClose_(p) {
     return { ok: true, findId: findId };
   }
 
-  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId,
-             { Status: 'ปิดเรื่อง', Note: (cur.Note || '') + ' | ปิดโดย ' + u.name });
-  log_(u.name, 'patrolClose', p.patrolId, p.reason || '');
+  var why = String(p.reason || '').trim();
+  if (!why) throw new Error('ปิดเรื่องต้องเลือกเหตุผลก่อน');
+  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId, {
+    Status: 'ปิดเรื่อง',
+    Note: (cur.Note ? cur.Note + ' | ' : '') + 'ปิดเรื่อง: ' + why + ' (โดย ' + u.name + ')'
+  });
+  log_(u.name, 'patrolClose', p.patrolId, why);
   bumpStamp_();
-  return { ok: true };
+  return { ok: true, reason: why };
+}
+
+/* ============================================================
+   เพิ่มเติม — สรุปจำนวน หาไลน์ใกล้สุด และผูกเรื่องนอกแผนเข้าใบงาน
+   ============================================================ */
+
+/** นับจำนวนไว้ติดป้ายบนปุ่มกล้อง เรียกบ่อยจึงทำให้เบาที่สุด */
+function apiPatrolSummary_(p) {
+  requireUser_(p);
+  var rows = readTable_(TABLES2.patrol).rows;
+  var waiting = 0, urgent = 0, matched = 0, outplan = 0, closed = 0;
+  rows.forEach(function (r) {
+    var st = String(r.Status || '');
+    var open = st !== 'ปิดเรื่อง' && st !== 'เปิดเป็นจุดที่พบแล้ว';
+    if (open) {
+      waiting++;
+      if (String(r.Severity || '') === 'เร่งด่วน') urgent++;
+      if (String(r.JobID || '').trim()) matched++; else outplan++;
+    } else if (st === 'ปิดเรื่อง') closed++;
+  });
+  return { ok: true, waiting: waiting, urgent: urgent, matched: matched,
+           outplan: outplan, closed: closed, total: rows.length };
+}
+
+/** ไลน์ในแผนที่ใกล้จุดนั้นที่สุด ไม่จำกัดรัศมี ใช้ตอนเรื่องอยู่นอกแผน */
+function apiPatrolNear_(p) {
+  requireUser_(p);
+  var lat = parseFloat(p.lat), lng = parseFloat(p.lng);
+  if ((!isFinite(lat) || !isFinite(lng)) && p.patrolId) {
+    readTable_(TABLES2.patrol).rows.forEach(function (r) {
+      if (r.PatrolID === p.patrolId) { lat = parseFloat(r.Lat); lng = parseFloat(r.Lng); }
+    });
+  }
+  if (!isFinite(lat) || !isFinite(lng)) throw new Error('ไม่พบพิกัดของรายการนี้');
+  var hits = patrolMatch_(lat, lng, p.year, parseFloat(p.radius) || 5000);
+  return { ok: true, lat: lat, lng: lng,
+           near: hits.slice(0, parseInt(p.limit, 10) || 3) };
+}
+
+/** ผูกเรื่องนอกแผนเข้ากับใบงานที่เลือกเอง แล้วเปิดเป็นจุดที่พบต่อได้ทันที */
+function apiPatrolAssign_(p) {
+  var u = requireUser_(p);
+  var cur = null;
+  readTable_(TABLES2.patrol).rows.forEach(function (r) { if (r.PatrolID === p.patrolId) cur = r; });
+  if (!cur) throw new Error('ไม่พบรายการพาโทรลนี้');
+  if (String(cur.By) !== u.name && !isSupervisor_(u.name))
+    throw new Error('ผูกใบงานได้เฉพาะผู้แจ้งเอง หรือผู้จัดการและหัวหน้าแผนก');
+  if (cur.FindID) throw new Error('รายการนี้เปิดเป็นจุดที่พบไว้แล้ว');
+
+  var jobId = String(p.jobId || '').trim();
+  if (!jobId) throw new Error('ยังไม่ได้เลือกใบงาน');
+  var job = null;
+  readTable_(TABLES.jobs).rows.forEach(function (j) { if (j.JobID === jobId) job = j; });
+  if (!job) throw new Error('ไม่พบใบงาน ' + jobId);
+
+  var fields = {
+    JobID: jobId,
+    LineCode: String(p.lineCode || cur.LineCode || ''),
+    PlaceName: String(p.placeName || cur.PlaceName || ''),
+    DistM: p.distM !== undefined && p.distM !== '' ? p.distM : cur.DistM,
+    Status: 'แจ้งแล้ว',
+    Note: (cur.Note ? cur.Note + ' | ' : '') + 'ผูกเข้าใบงานเองโดย ' + u.name
+  };
+  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId, fields);
+  log_(u.name, 'patrolAssign', p.patrolId, jobId);
+  bumpStamp_();
+
+  if (p.promote) {
+    var merged = {};
+    Object.keys(cur).forEach(function (k) { merged[k] = cur[k]; });
+    Object.keys(fields).forEach(function (k) { merged[k] = fields[k]; });
+    return apiPatrolClose_({ user: p.user, token: p.token, patrolId: p.patrolId, promote: 1 });
+  }
+  return { ok: true, jobId: jobId, lineCode: fields.LineCode };
 }
 
 /* ============================================================

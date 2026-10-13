@@ -188,6 +188,19 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .cv{flex-shrink:0}
 .verline{text-align:center;margin:14px 0 2px;font-size:11px;color:var(--dim);opacity:.8;line-height:1.7}
 .bottomnav{display:none}
+/* --- รายการพาโทรล --- */
+.plchips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.plchip{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:999px;
+  padding:7px 14px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}
+.plchip.on{background:var(--pea);border-color:var(--pea);color:#fff;font-weight:600}
+.plrow{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line2);
+  align-items:flex-start;cursor:pointer}
+.plrow:first-child{border-top:0}
+.plth{width:54px;height:54px;border-radius:9px;object-fit:cover;flex-shrink:0}
+.fabdot{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;border-radius:999px;
+  background:#B4402E;color:#fff;font-size:11.5px;font-weight:700;display:flex;
+  align-items:center;justify-content:center;padding:0 6px;border:2px solid #fff}
+
 /* --- หน้าดูรายงานเต็มจอ --- */
 #printView{position:fixed;inset:0;z-index:120;background:#EFECE5;display:flex;flex-direction:column}
 #printView .pvbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px;
@@ -401,7 +414,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-13a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -659,6 +672,8 @@ async function startApp(){
   splashOff();
   setTimeout(fitAll, 50);
   setTimeout(()=>{ fitAll(); diagBox(); }, 600);
+  patrolBadgeRefresh();
+  patrolDeepLink();
 }
 
 async function loadYear(year, opts={}){
@@ -881,6 +896,7 @@ function checkQueue(){
 
 function renderCheck(){
   if(!S.sld) ensureSld().then(()=>{ if(S.view==='check') renderCheck(); });
+  if(!PL.sum) patrolBadgeRefresh().then(()=>{ if(S.view==='check') renderCheck(); });
   const q = checkQueue();
   const show = (q.overdue.length ? q.overdue : q.soon).slice(0, 60);
   const kpi = (lbl, n, sub, col) => `
@@ -890,7 +906,33 @@ function renderCheck(){
       <div class="sub" style="font-size:11px">${sub}</div>
     </div>`;
 
+  const ps = PL.sum || {};
+  const pw = num(ps.waiting);
   $('#v-check').innerHTML = `
+    <div class="card" style="margin-bottom:14px;border-left:4px solid ${pw ? (num(ps.urgent)?'var(--bad)':'var(--warn)') : 'var(--line)'}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <h3 style="font-size:16px">พาโทรลรอจัดการ</h3>
+          <div class="sub">เรื่องที่ถ่ายรูปแจ้งเข้ามา ยังไม่ได้ตัดสินใจ</div>
+        </div>
+        <span class="pill ${pw ? (num(ps.urgent)?'p-bad':'p-warn') : 'p-ok'}"
+          style="font-size:15px;font-weight:700">${pw}</span>
+      </div>
+      ${pw ? `<div style="display:flex;gap:8px;margin-top:12px">
+        <div style="flex:1;background:var(--bad-soft);border-radius:10px;padding:8px 10px">
+          <div style="font-size:18px;font-weight:700;color:#B4402E">${num(ps.urgent)}</div>
+          <div class="sub">เร่งด่วน</div></div>
+        <div style="flex:1;background:var(--warn-soft);border-radius:10px;padding:8px 10px">
+          <div style="font-size:18px;font-weight:700;color:#7A5A10">${num(ps.matched)}</div>
+          <div class="sub">ตรงกับแผน</div></div>
+        <div style="flex:1;background:#F2F0EC;border-radius:10px;padding:8px 10px">
+          <div style="font-size:18px;font-weight:700;color:#5F5C55">${num(ps.outplan)}</div>
+          <div class="sub">นอกแผน</div></div>
+      </div>` : '<div class="sub" style="margin-top:8px">ไม่มีเรื่องค้าง เคลียร์หมดแล้ว</div>'}
+      <button class="btn ${pw?'':'ghost'}" style="margin-top:12px;width:100%;height:42px"
+        onclick="openPatrolList('${'waiting'}')">เปิดรายการพาโทรล</button>
+    </div>
+
     <div class="grid kpigrid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:14px">
       ${kpi('เกินกำหนดแล้ว', q.overdue.length, 'ไลน์แยกที่ยังไม่ตัด', q.overdue.length?'var(--bad)':'')}
       ${kpi('ใกล้ถึงกำหนด', q.soon.length, 'ภายใน 30 วัน', q.soon.length?'var(--warn)':'')}
@@ -3269,6 +3311,313 @@ async function patrolSubmit(){
     toast(e.message, 4500);
     if(btn){ btn.disabled = false; btn.textContent = 'ส่งเรื่อง'; }
   }finally{ PT.busy = false; }
+}
+
+/* ============================================================
+   ระบบจัดการพาโทรล — รายการ รายละเอียด และการสั่งงานต่อ
+   ============================================================ */
+let PL = { filter: 'waiting', rows: [], sum: null, busy: false, item: null };
+
+const PL_FILTERS = [
+  ['waiting', 'รอจัดการ'],
+  ['urgent',  'เร่งด่วน'],
+  ['matched', 'ตรงกับแผน'],
+  ['outplan', 'นอกแผน'],
+  ['closed',  'ปิดแล้ว'],
+  ['',        'ทั้งหมด']
+];
+
+const PL_REASONS = ['ตัดแล้ว', 'ไม่ใช่ต้นไม้ที่ต้องตัด', 'ซ้ำกับเรื่องอื่น', 'แจ้งผิดจุด'];
+
+/* ---------- ป้ายตัวเลขบนปุ่มกล้อง ---------- */
+async function patrolBadgeRefresh(){
+  if(!S.user || !S.token) return;
+  try{
+    const out = await tree2('patrolSummary', {});
+    PL.sum = out;
+    patrolBadgePaint();
+  }catch(e){ /* เงียบไว้ ไม่ให้รบกวนการใช้งาน */ }
+}
+function patrolBadgePaint(){
+  const fab = document.querySelector('.fab');
+  if(!fab) return;
+  let b = fab.querySelector('.fabdot');
+  const n = PL.sum ? num(PL.sum.waiting) : 0;
+  if(!n){ if(b) b.remove(); return; }
+  if(!b){ b = el('<span class="fabdot"></span>'); fab.appendChild(b); }
+  b.textContent = n > 99 ? '99+' : n;
+  b.style.background = (PL.sum && num(PL.sum.urgent)) ? '#B4402E' : '#C98A16';
+}
+
+/* ---------- รายการ ---------- */
+async function openPatrolList(filter){
+  PL.filter = filter === undefined ? PL.filter : filter;
+  openSheet('รายการพาโทรล', 'ปี ' + S.year, `
+    <div id="plBody"><div class="card"><div class="sub">กำลังโหลด…</div></div></div>`);
+  await patrolLoad();
+}
+
+async function patrolLoad(){
+  const box = $('#plBody');
+  if(box) box.innerHTML = `<div class="card"><div class="sub">กำลังโหลด…</div></div>`;
+  try{
+    const [list, sum] = await Promise.all([
+      tree2('patrolList', {filter: PL.filter, limit: 150}),
+      tree2('patrolSummary', {})
+    ]);
+    PL.rows = list.rows || [];
+    PL.sum = sum;
+    patrolBadgePaint();
+    patrolListRender(list.total);
+  }catch(e){
+    if($('#plBody')) $('#plBody').innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+function plCount(key){
+  const s = PL.sum || {};
+  if(key === 'waiting') return num(s.waiting);
+  if(key === 'urgent')  return num(s.urgent);
+  if(key === 'matched') return num(s.matched);
+  if(key === 'outplan') return num(s.outplan);
+  if(key === 'closed')  return num(s.closed);
+  return num(s.total);
+}
+
+function plStatusPill(r){
+  const st = String(r.Status||'');
+  if(st === 'เปิดเป็นจุดที่พบแล้ว') return '<span class="pill p-ok">เปิดเป็นจุดที่พบแล้ว</span>';
+  if(st === 'ปิดเรื่อง')          return '<span class="pill p-gray">ปิดเรื่อง</span>';
+  if(st === 'นอกแผน')             return '<span class="pill p-gray">นอกแผน</span>';
+  return '<span class="pill p-warn">รอจัดการ</span>';
+}
+
+function patrolListRender(total){
+  const box = $('#plBody');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="plchips">
+      ${PL_FILTERS.map(([k,label]) => `<button type="button" class="plchip ${PL.filter===k?'on':''}"
+        onclick="PL.filter='${k}';patrolLoad()">${esc(label)}${plCount(k)?' '+plCount(k):''}</button>`).join('')}
+    </div>
+    ${PL.rows.length ? `<div class="card" style="padding-top:4px">
+      ${PL.rows.map(r => `
+        <div class="plrow" onclick="openPatrolItem('${esc(r.PatrolID)}')">
+          ${r.PhotoUrl ? `<img class="plth" src="${esc(photoThumb(r))}" alt="" loading="lazy">`
+                       : `<div class="plth" style="background:var(--line2)"></div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(r.LineCode || 'นอกแผน')}
+              ${r.DistM !== '' && r.DistM !== undefined ? `<span class="sub" style="font-weight:400"> · ${esc(r.DistM)} ม.</span>` : ''}</div>
+            <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.PlaceName || r.Note || '—')}</div>
+            <div class="sub">${esc(r.By || '')} · ${esc(thaiDateShort(r.Date))} ${esc(r.Time || '')}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0">
+            <span class="pill ${String(r.Severity)==='เร่งด่วน'?'p-bad':'p-gray'}">${esc(r.Severity || 'ปกติ')}</span>
+            ${plStatusPill(r)}
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="sub" style="text-align:center">แสดง ${PL.rows.length} จาก ${esc(total)} รายการ · แตะที่แถวเพื่อสั่งงานต่อ</div>`
+    : `<div class="card"><div class="sub">ไม่มีรายการในหมวดนี้</div></div>`}`;
+}
+
+/* รูปจากไดรฟ์ ใช้ลิงก์แบบ thumbnail จะโหลดเร็วกว่าและไม่โดนบล็อก */
+function photoThumb(r){
+  if(r.FileID) return 'https://drive.google.com/thumbnail?id=' + r.FileID + '&sz=w200';
+  return r.PhotoUrl || '';
+}
+
+/* ---------- รายละเอียด ---------- */
+async function openPatrolItem(id){
+  let r = PL.rows.find(x => x.PatrolID === id);
+  openSheet('รายละเอียดพาโทรล', id, `<div id="piBody"><div class="card"><div class="sub">กำลังโหลด…</div></div></div>`);
+  if(!r){
+    try{
+      const out = await tree2('patrolList', {limit: 500});
+      PL.rows = out.rows || [];
+      r = PL.rows.find(x => x.PatrolID === id);
+    }catch(e){}
+  }
+  if(!r){ $('#piBody').innerHTML = `<div class="card"><div class="sub">ไม่พบรายการ ${esc(id)}</div></div>`; return; }
+  PL.item = r;
+  patrolItemRender();
+  if(!String(r.JobID||'').trim() && String(r.Status||'') !== 'ปิดเรื่อง') patrolLoadNear(id);
+}
+
+function patrolItemRender(extra){
+  const r = PL.item;
+  if(!r) return;
+  const job = (S.data.jobs||[]).find(j => j.JobID === r.JobID);
+  const closed  = String(r.Status||'') === 'ปิดเรื่อง';
+  const promoted = !!String(r.FindID||'').trim();
+  const matched = !!String(r.JobID||'').trim();
+  const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.Lat + ',' + r.Lng);
+
+  $('#piBody').innerHTML = `
+    ${r.PhotoUrl ? `<a href="${esc(r.PhotoUrl)}" target="_blank" rel="noopener">
+      <img src="${esc(photoThumbBig(r))}" style="width:100%;border-radius:12px;display:block" alt="รูปที่ถ่ายจากหน้างาน"></a>` : ''}
+
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span class="pill ${String(r.Severity)==='เร่งด่วน'?'p-bad':'p-gray'}">${esc(r.Severity || 'ปกติ')}</span>
+        ${matched ? `<span class="pill p-ok">ห่างจุดในแผน ${esc(r.DistM)} ม.</span>`
+                  : `<span class="pill p-warn">นอกแผน</span>`}
+        ${plStatusPill(r)}
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+        <div class="sub">ผู้แจ้ง</div><div>${esc(r.By || '')}</div>
+        <div class="sub">เวลา</div><div>${esc(thaiDateShort(r.Date))} ${esc(r.Time || '')}</div>
+        ${matched ? `
+          <div class="sub">ไลน์</div><div style="font-weight:600">${esc(r.LineCode)}</div>
+          <div class="sub">สถานที่</div><div>${esc(r.PlaceName || '-')}</div>
+          <div class="sub">ใบงาน</div><div style="font-weight:600">${esc(job ? (job.MJMNo||job.JobID) : r.JobID)}</div>
+          <div class="sub">ฟีดเดอร์</div><div>${esc(job ? (job.FeederID||'') : '')} ${esc(job ? (job.VoltLevel||'') : '')}</div>
+          <div class="sub">ผู้รับจ้าง</div><div>${esc(job ? (job.Contractor||'-') : '-')}</div>` : ''}
+        ${r.Note ? `<div class="sub">หมายเหตุ</div><div>${esc(r.Note)}</div>` : ''}
+      </div>
+    </div>
+
+    ${extra || ''}
+
+    <div class="card">
+      <div class="plabel">สั่งงานต่อ</div>
+      ${promoted ? `<div class="sub" style="margin-bottom:10px">เปิดเป็นจุดที่พบแล้ว รหัส ${esc(r.FindID)}</div>`
+        : (closed ? `<div class="sub" style="margin-bottom:10px">เรื่องนี้ปิดแล้ว</div>`
+        : (matched ? `
+          <button class="btn" style="width:100%;height:44px" onclick="patrolPromote()">เปิดเป็นจุดที่พบในใบงาน</button>
+          <div class="sub" style="margin-top:6px">จะไปอยู่ในรายการจุดที่พบ และล็อกการตรวจรับรอบนั้นจนกว่าจะปรับปรุงเสร็จ</div>` : ''))}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <a class="btn ghost" style="flex:1;height:40px;display:flex;align-items:center;justify-content:center;text-decoration:none"
+           href="${esc(map)}" target="_blank" rel="noopener">เปิดแผนที่</a>
+        ${matched ? `<button class="btn ghost" style="flex:1;height:40px"
+           onclick="closeSheet();openLineInfo('${esc(r.LineCode)}')">เปิดใบงาน</button>` : ''}
+      </div>
+      ${closed ? '' : `<button class="btn ghost" style="margin-top:8px;width:100%;height:40px"
+        onclick="patrolAskClose()">ปิดเรื่อง ไม่ต้องทำอะไร</button>`}
+    </div>
+
+    <button class="btn ghost" style="width:100%;height:40px" onclick="openPatrolList()">กลับไปรายการ</button>`;
+}
+
+function photoThumbBig(r){
+  if(r.FileID) return 'https://drive.google.com/thumbnail?id=' + r.FileID + '&sz=w1000';
+  return r.PhotoUrl || '';
+}
+
+/* ---------- นอกแผน: ไลน์ใกล้สุดสามเส้น ---------- */
+async function patrolLoadNear(id){
+  try{
+    const out = await tree2('patrolNear', {patrolId: id, year: S.year, limit: 3});
+    const near = out.near || [];
+    const html = `
+      <div class="card" style="border-left:4px solid var(--warn)">
+        <div style="font-weight:600">ไม่อยู่ในรัศมีของไลน์ไหนในแผนปี ${esc(S.year)}</div>
+        <div class="plabel" style="margin-top:12px">ไลน์ที่ใกล้ที่สุด เลือกผูกได้เลย</div>
+        ${near.length ? near.map(n => `
+          <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line2)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600">${esc(n.lineCode)}
+                <span class="sub" style="font-weight:400"> · ห่าง ${esc(n.distM)} ม.</span></div>
+              <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.placeName||'')} · ${esc(n.mjmNo||'')}</div>
+            </div>
+            <button class="btn" style="height:34px;padding:0 12px;flex-shrink:0"
+              onclick="patrolAssign('${esc(n.jobId)}','${esc(n.lineCode)}',${Number(n.distM)||0},'${esc((n.placeName||'').replace(/'/g,''))}')">ผูกกับใบนี้</button>
+          </div>`).join('')
+          : '<div class="sub">ไม่พบไลน์ในแผนในระยะ 5 กิโลเมตร</div>'}
+        <button class="btn ghost" style="margin-top:12px;width:100%;height:38px" onclick="patrolPickJob()">เลือกจากรายการทั้งหมด</button>
+      </div>`;
+    patrolItemRender(html);
+  }catch(e){ /* ปล่อยหน้าไว้อย่างเดิม */ }
+}
+
+function patrolPickJob(){
+  const jobs = (S.data.jobs||[]).slice().sort((a,b) => String(a.MJMNo||'').localeCompare(String(b.MJMNo||'')));
+  const html = `
+    <div class="card">
+      <div class="plabel">เลือกใบงานเอง</div>
+      <select class="inp" id="piJob" style="width:100%;height:42px">
+        ${jobs.map(j => `<option value="${esc(j.JobID)}">${esc(j.MJMNo||j.JobID)} · ${esc(j.FeederID||'')} · ${esc((j.JobName||'').slice(0,40))}</option>`).join('')}
+      </select>
+      <button class="btn" style="margin-top:10px;width:100%;height:42px"
+        onclick="patrolAssign($('#piJob').value,'',0,'')">ผูกกับใบงานที่เลือก</button>
+      <button class="btn ghost" style="margin-top:8px;width:100%;height:38px"
+        onclick="patrolLoadNear(PL.item.PatrolID)">กลับไปดูไลน์ใกล้สุด</button>
+    </div>`;
+  patrolItemRender(html);
+}
+
+async function patrolAssign(jobId, lineCode, distM, placeName){
+  if(PL.busy) return;
+  PL.busy = true;
+  try{
+    await tree2('patrolAssign', {patrolId: PL.item.PatrolID, jobId, lineCode, distM, placeName});
+    markDirty();
+    toast('ผูกเข้าใบงานแล้ว');
+    PL.item = Object.assign({}, PL.item, {JobID: jobId, LineCode: lineCode || PL.item.LineCode,
+      DistM: distM || PL.item.DistM, PlaceName: placeName || PL.item.PlaceName, Status: 'แจ้งแล้ว'});
+    patrolItemRender();
+  }catch(e){ toast(e.message, 5000); }
+  finally{ PL.busy = false; }
+}
+
+/* ---------- ยกระดับ / ปิดเรื่อง ---------- */
+async function patrolPromote(){
+  if(PL.busy) return;
+  PL.busy = true;
+  try{
+    const out = await tree2('patrolClose', {patrolId: PL.item.PatrolID, promote: 1});
+    markDirty();
+    toast('เปิดเป็นจุดที่พบแล้ว ' + (out.findId || ''));
+    PL.item = Object.assign({}, PL.item, {Status: 'เปิดเป็นจุดที่พบแล้ว', FindID: out.findId});
+    patrolItemRender();
+    patrolBadgeRefresh();
+  }catch(e){ toast(e.message, 5000); }
+  finally{ PL.busy = false; }
+}
+
+function patrolAskClose(){
+  const html = `
+    <div class="card" style="border-left:4px solid var(--warn)">
+      <div class="plabel">ปิดเรื่องเพราะอะไร</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${PL_REASONS.map(x => `<button class="btn ghost" style="height:40px"
+          onclick="patrolDoClose('${esc(x)}')">${esc(x)}</button>`).join('')}
+      </div>
+      <div class="plabel" style="margin-top:12px">หรือพิมพ์เอง</div>
+      <input class="inp" id="piWhy" style="width:100%" placeholder="เหตุผล">
+      <button class="btn" style="margin-top:10px;width:100%;height:42px"
+        onclick="patrolDoClose(($('#piWhy').value||'').trim())">ปิดเรื่อง</button>
+      <button class="btn ghost" style="margin-top:8px;width:100%;height:38px"
+        onclick="patrolItemRender()">ยกเลิก</button>
+    </div>`;
+  patrolItemRender(html);
+}
+
+async function patrolDoClose(reason){
+  if(!reason){ toast('เลือกหรือพิมพ์เหตุผลก่อน'); return; }
+  if(PL.busy) return;
+  PL.busy = true;
+  try{
+    await tree2('patrolClose', {patrolId: PL.item.PatrolID, reason});
+    markDirty();
+    toast('ปิดเรื่องแล้ว');
+    PL.item = Object.assign({}, PL.item, {Status: 'ปิดเรื่อง'});
+    patrolItemRender();
+    patrolBadgeRefresh();
+  }catch(e){ toast(e.message, 5000); }
+  finally{ PL.busy = false; }
+}
+
+/* ---------- เปิดจากลิงก์ในไลน์ ---------- */
+function patrolDeepLink(){
+  let q;
+  try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  const id = q.get('patrol');
+  const view = q.get('view');
+  if(!id && view !== 'patrol') return;
+  /* ล้าง query ออกจากแถบที่อยู่ กันเปิดซ้ำตอนรีเฟรช */
+  try{ history.replaceState({}, '', location.pathname); }catch(e){}
+  setTimeout(() => { if(id) openPatrolItem(id); else openPatrolList('waiting'); }, 400);
 }
 
 /* ---------- 2. รายงานเบิกจ่ายเงิน เอกสารแนบท้ายบันทึก ---------- */
