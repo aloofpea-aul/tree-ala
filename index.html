@@ -3390,6 +3390,10 @@ function payPrint(){
   document.body.appendChild(box);
   document.body.style.overflow = 'hidden';
   const f = box.querySelector('#pvFrame');
+  /* ปุ่มสั่งพิมพ์ในตัวเอกสารซ้ำกับปุ่มบนแถบหัว ซ่อนทิ้งเวลาดูในแอป */
+  f.addEventListener('load', () => {
+    try{ f.contentDocument.querySelectorAll('.noprint').forEach(e => e.remove()); }catch(e){}
+  });
   f.srcdoc = payReportHtml(r);
   window.addEventListener('keydown', pvEsc);
   history.pushState({pv:1}, '');            // ปุ่มย้อนกลับของเครื่องก็ปิดได้
