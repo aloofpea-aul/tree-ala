@@ -470,7 +470,8 @@ function apiPayReport_(p) {
     docNo: pay ? (pay.DocNo || '') : '',
     docDate: pay ? (pay.DocDate || '') : '',
     docNoFull: payDocNoFull_(pay, job),
-    canIssue: roundAcceptedSafe_(jobId, no),
+    canIssue: roundReadySafe_(jobId, no).ok,
+    blockReason: roundReadySafe_(jobId, no).text,
     bookReady: !!(getConfig_().BOOKNO_URL && getConfig_().BOOKNO_KEY),
     org: getConfig_().ORG_NAME || 'กฟส.อ่าวลึก'
   };
@@ -486,16 +487,21 @@ function payDocNoFull_(pay, job) {
   return prefix + String(pay.DocNo).trim() + (be ? '/' + be : '');
 }
 
-/** เรียก roundAccepted_ จาก BookNo.gs แบบไม่ให้ล้มถ้ายังไม่ได้ติดตั้งไฟล์นั้น */
-function roundAcceptedSafe_(jobId, no) {
-  try { return roundAccepted_(jobId, no); }
+/** เรียกกฎเดียวจาก BookNo.gs แบบไม่ให้ล้มถ้ายังไม่ได้ติดตั้งไฟล์นั้น */
+function roundReadySafe_(jobId, no) {
+  try { return roundReadyInfo_(jobId, no); }
   catch (e) {
-    var ok = false;
-    readTable_(TABLES.rounds).rows.forEach(function (r) {
-      if (r.JobID === jobId && String(r.RoundNo) === String(no) &&
-          String(r.AcceptDate || '').trim() !== '') ok = true;
+    var r = null;
+    readTable_(TABLES.rounds).rows.forEach(function (x) {
+      if (x.JobID === jobId && String(x.RoundNo) === String(no)) r = x;
     });
-    return ok;
+    var miss = [];
+    if (!r) miss.push('ไม่พบรอบที่ ' + no + ' ของใบงานนี้');
+    else {
+      if (String(r.Status || '').indexOf('ตรวจรับแล้ว') < 0) miss.push('สถานะยังไม่เป็น ตรวจรับแล้ว');
+      if (String(r.AcceptDate || '').trim() === '')          miss.push('ยังไม่ได้ลงวันตรวจรับ');
+    }
+    return { ok: miss.length === 0, missing: miss, text: miss.join(' · '), round: r };
   }
 }
 

@@ -188,6 +188,19 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
 .cv{flex-shrink:0}
 .verline{text-align:center;margin:14px 0 2px;font-size:11px;color:var(--dim);opacity:.8;line-height:1.7}
 .bottomnav{display:none}
+/* --- หน้าดูรายงานเต็มจอ --- */
+#printView{position:fixed;inset:0;z-index:120;background:#EFECE5;display:flex;flex-direction:column}
+#printView .pvbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--pea);color:#fff;padding-top:calc(10px + env(safe-area-inset-top))}
+#printView .pvtitle{flex:1;min-width:0;font-size:14px;font-weight:600;text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#printView .pvbar button{font:inherit;border:0;border-radius:9px;cursor:pointer;height:38px;padding:0 14px}
+#printView .pvclose{background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;gap:6px}
+#printView .pvprint{background:#fff;color:var(--pea);font-weight:600}
+#printView iframe{flex:1;width:100%;border:0;background:#EFECE5}
+@media print{ body > *:not(#printView){display:none !important} #printView{position:static}
+  #printView .pvbar{display:none !important} }
+
 /* --- ปุ่มพาโทรลต้นไม้ ลอยมุมขวาล่าง --- */
 .fab{position:fixed;right:18px;bottom:22px;z-index:85;width:56px;height:56px;border-radius:999px;
   border:none;cursor:pointer;background:var(--pea);color:#fff;box-shadow:0 6px 18px rgba(74,29,98,.38);
@@ -2016,12 +2029,11 @@ function renderPay(){
             <td data-l="สถานะ">${String(p.Status).indexOf('เบิกจ่ายแล้ว')>=0
               ? '<span class="pill p-ok">เบิกจ่ายแล้ว</span>'
               : (lk ? '<span class="pill p-bad">ล็อกอยู่</span>' : '<span class="pill p-warn">รอตั้งเบิก</span>')}</td>
-            <td>${lk
-              ? `<div class="sub" style="max-width:220px">${esc(lk)}</div>`
-              : `<div style="display:flex;gap:6px;flex-wrap:wrap">
-                   <button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button>
-                   <button class="btn ghost" style="height:34px;padding:0 12px" onclick="openPayReport('${esc(p.JobID)}', ${num(p.Installment)})">รายงานเบิกจ่าย</button>
-                 </div>`}</td>
+            <td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                 ${lk ? `<div class="sub" style="max-width:220px">${esc(lk)}</div>`
+                      : `<button class="btn ghost" style="height:34px;padding:0 12px" onclick="togglePay('${esc(p.PayID)}', this)">สลับสถานะ</button>`}
+                 <button class="btn ghost" style="height:34px;padding:0 12px" onclick="openPayReport('${esc(p.JobID)}', ${num(p.Installment)})">${lk ? 'ดูร่างรายงาน' : 'รายงานเบิกจ่าย'}</button>
+               </div></td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -2030,16 +2042,32 @@ function renderPay(){
 }
 
 /* งวดเงินเบิกไม่ได้จนกว่ารอบที่ตรงกันจะตรวจรับผ่าน */
+/* ============================================================
+   กฎเดียวของทั้งระบบ — รอบนี้ "ผ่านการตรวจรับ" หรือยัง
+   ต้องครบทั้งสองอย่าง  ลงวันตรวจรับ  และ  สถานะเป็น ตรวจรับแล้ว
+   ฝั่งเซิร์ฟเวอร์ใช้กฎเดียวกันนี้ (roundReadyInfo_ ใน BookNo.gs)
+   ============================================================ */
+function roundReady(jobId, no){
+  const r = (S.data.rounds||[]).find(x => x.JobID === jobId && num(x.RoundNo) === num(no));
+  const miss = [];
+  if(!r) miss.push('ไม่พบรอบที่ ' + no + ' ของใบงานนี้');
+  else{
+    if(String(r.Status||'').indexOf('ตรวจรับแล้ว') < 0) miss.push('สถานะยังไม่เป็น ตรวจรับแล้ว');
+    if(String(r.AcceptDate||'').trim() === '')          miss.push('ยังไม่ได้ลงวันตรวจรับ');
+  }
+  return { ok: miss.length === 0, missing: miss, text: miss.join(' · '), round: r || null };
+}
+
 function payLock(pay, job){
   if(String(pay.Status||'').indexOf('เบิกจ่ายแล้ว') >= 0) return '';
   if(job.JobType !== 'รายปี') return '';
   const no = num(pay.Installment);
   if(!no) return '';
-  const r = (S.data.rounds||[]).find(x => x.JobID === pay.JobID && num(x.RoundNo) === no);
-  if(r && String(r.AcceptDate||'').trim() !== '') return '';
+  const rd = roundReady(pay.JobID, no);
+  if(rd.ok) return '';
   const blk = acceptBlockers(pay.JobID, no);
   if(blk.length) return 'รอบที่ ' + no + ' ยังตรวจรับไม่ได้ — ' + blk.map(b=>b.text).join(' · ');
-  return 'รอบที่ ' + no + ' ยังไม่ได้ตรวจรับ';
+  return 'รอบที่ ' + no + ' — ' + rd.text;
 }
 
 async function togglePay(payId, btn){
@@ -3273,7 +3301,14 @@ async function openPayReport(jobId, no){
 function payReportForm(r){
   const cm = r.committee || [];
   const needDoc = !r.docNo;
+  const draft = !r.canIssue;                       // ยังไม่ผ่านการตรวจรับ = ได้แค่ฉบับร่าง
+  const why = r.blockReason || 'รอบนี้ยังไม่ผ่านการตรวจรับ';
   $('#prBody').innerHTML = `
+    ${draft ? `<div class="card" style="border-left:4px solid var(--warn);background:var(--warn-soft)">
+        <div style="font-weight:600">พิมพ์ได้เฉพาะฉบับร่าง</div>
+        <div class="sub" style="margin-top:4px">${esc(why)}</div>
+        <div class="sub" style="margin-top:6px">ฉบับร่างจะมีคำว่า ร่าง ทับกลางหน้าทุกหน้า ใช้ดูหรือทานก่อนได้ แต่ใช้ตั้งเบิกไม่ได้</div>
+      </div>` : ''}
     <div class="card">
       <div class="kanit" style="font-size:17px">${esc(r.job.MJMNo || r.job.JobID)}</div>
       <div class="sub">${esc(r.job.JobName || '')}</div>
@@ -3282,7 +3317,8 @@ function payReportForm(r){
         <div class="sub">จำนวนเงิน</div><div style="font-weight:600">${fmt0(r.amount)} บาท</div>
         <div class="sub">ราคาตามสัญญา</div><div>${fmt0(r.contractPrice)} บาท</div>
         <div class="sub">ตัดแล้ว</div><div>${esc(r.cutCount)} จาก ${esc(r.lineCount)} ไลน์</div>
-        <div class="sub">วันตรวจรับ</div><div>${esc(r.round && r.round.AcceptDate ? thaiDate(r.round.AcceptDate) : 'ยังไม่ตรวจรับ')}</div>
+        <div class="sub">วันตรวจรับ</div><div>${r.round && r.round.AcceptDate ? esc(thaiDate(r.round.AcceptDate)) : '<span style="color:var(--warn)">ยังไม่ได้ลง</span>'}</div>
+        <div class="sub">สถานะรอบ</div><div>${esc((r.round && r.round.Status) || '—')}</div>
         <div class="sub">เลขหนังสือ</div><div>${r.docNoFull ? esc(r.docNoFull) : '<span style="color:var(--warn)">ยังไม่ได้ออกเลข</span>'}</div>
       </div>
     </div>
@@ -3305,12 +3341,14 @@ function payReportForm(r){
           ${r.canIssue && r.bookReady ? '' : 'disabled'}>ออกเลขหนังสือจากระบบทะเบียน</button>
         <div class="sub" style="margin-top:8px">
           ${!r.bookReady ? 'ยังไม่ได้ตั้งค่า BOOKNO_URL และ BOOKNO_KEY ในแท็บ Config'
-            : (!r.canIssue ? 'รอบที่ ' + esc(r.installment) + ' ยังไม่ผ่านการตรวจรับ จึงยังออกเลขไม่ได้'
+            : (draft ? esc(why) + ' จึงยังออกเลขไม่ได้'
             : 'ออกเลขครั้งเดียว พิมพ์ซ้ำกี่ครั้งก็ใช้เลขเดิม')}
         </div>` : ''}
       <button class="btn ${needDoc ? 'ghost' : ''}" style="margin-top:${needDoc?'10px':'0'};width:100%;height:46px"
-        onclick="payPrint()">พิมพ์รายงาน</button>
-      <div class="sub" style="margin-top:8px">พิมพ์ได้โดยไม่ต้องมีเลขหนังสือ ช่องเลขที่จะเว้นว่างไว้ให้เขียนมือ</div>
+        onclick="payPrint()">${draft ? 'พิมพ์ฉบับร่าง' : 'พิมพ์รายงาน'}</button>
+      <div class="sub" style="margin-top:8px">${draft
+        ? 'เปิดดูเต็มหน้าในแอป มีปุ่มปิดกลับมาหน้านี้ได้'
+        : 'พิมพ์ได้โดยไม่ต้องมีเลขหนังสือ ช่องเลขที่จะเว้นว่างไว้ให้เขียนมือ'}</div>
     </div>`;
 }
 
@@ -3330,17 +3368,58 @@ async function payIssueDoc(jobId, no){
   }
 }
 
+/* เปิดรายงานเต็มจอทับแอป มีแถบหัวให้กดปิดกลับได้ตลอด
+   เดิมใช้ window.open ซึ่งบนมือถือไม่มีปุ่มย้อนกลับ ออกไม่ได้นอกจากปิดแอป */
 function payPrint(){
   const r = window.__payReport;
   if(!r){ toast('ยังไม่มีข้อมูล'); return; }
-  const w = window.open('', '_blank');
-  if(!w){ toast('เบราว์เซอร์ปิดกั้นหน้าต่างใหม่ กรุณาอนุญาตแล้วลองอีกครั้ง'); return; }
-  w.document.write(payReportHtml(r));
-  w.document.close();
+  const draft = !r.canIssue;
+  closePrintView();
+  const box = el(`
+    <div id="printView">
+      <div class="pvbar">
+        <button type="button" class="pvclose" onclick="closePrintView()" aria-label="ปิด">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          ปิด
+        </button>
+        <div class="pvtitle">${draft ? 'ฉบับร่าง' : 'รายงานเบิกจ่าย'} · งวดที่ ${esc(r.installment)}</div>
+        <button type="button" class="pvprint" onclick="doPrintView()">สั่งพิมพ์</button>
+      </div>
+      <iframe id="pvFrame" title="รายงานเบิกจ่าย"></iframe>
+    </div>`);
+  document.body.appendChild(box);
+  document.body.style.overflow = 'hidden';
+  const f = box.querySelector('#pvFrame');
+  f.srcdoc = payReportHtml(r);
+  window.addEventListener('keydown', pvEsc);
+  history.pushState({pv:1}, '');            // ปุ่มย้อนกลับของเครื่องก็ปิดได้
+  window.addEventListener('popstate', pvPop);
+}
+function pvEsc(e){ if(e.key === 'Escape') closePrintView(); }
+function pvPop(){ const b = $('#printView'); if(b) closePrintView(true); }
+function closePrintView(fromBack){
+  const b = $('#printView');
+  window.removeEventListener('keydown', pvEsc);
+  window.removeEventListener('popstate', pvPop);
+  if(!b) return;
+  b.remove();
+  document.body.style.overflow = '';
+  if(!fromBack && history.state && history.state.pv) history.back();
+}
+function doPrintView(){
+  const f = $('#pvFrame');
+  if(!f){ return; }
+  try{
+    f.contentWindow.focus();
+    f.contentWindow.print();
+  }catch(e){
+    toast('เครื่องนี้สั่งพิมพ์จากในแอปไม่ได้ ใช้เมนูแชร์ของเบราว์เซอร์แล้วเลือกพิมพ์แทน', 5000);
+  }
 }
 
 function payReportHtml(r){
   const j = r.job || {};
+  const draft = !r.canIssue;                       // ยังไม่ผ่านการตรวจรับ = ฉบับร่าง
   const cm = (r.committee || []).filter(c => String(c.Name || '').trim() !== '');
   const sg = r.signers || {};
   const before = (r.photos || []).filter(p => String(p.kind).indexOf('ก่อน') >= 0).slice(0, 6);
@@ -3361,7 +3440,7 @@ function payReportHtml(r){
   @page { size: A4; margin: 18mm 18mm 16mm; }
   * { box-sizing: border-box; }
   body { font-family: "TH Sarabun New","Sarabun","Leelawadee UI","Tahoma",sans-serif;
-         font-size: 16pt; line-height: 1.5; color: #000; margin: 0; }
+         font-size: 16pt; line-height: 1.5; color: #000; margin: 0; position: relative; }
   .seal { width: 34mm; display: block; margin: 0 auto 5mm; }
   h1 { font-size: 18pt; text-align: center; margin: 0 0 2mm; font-weight: 700; }
   .sub { text-align: center; font-size: 15pt; margin: 0 0 6mm; }
@@ -3392,6 +3471,9 @@ function payReportHtml(r){
   .pics img { width: 100%; height: 42mm; object-fit: cover; border: 1px solid #999; }
   .pics figcaption { font-size: 13pt; text-align: center; }
   .note { font-size: 14pt; color: #333; }
+  .draftnote { border: 1.6pt solid #B4402E; border-radius: 2mm; padding: 2mm 4mm;
+               text-align: center; font-size: 15pt; font-weight: 700; color: #B4402E;
+               margin: 0 0 5mm; background: #FFF6F4; }
   @media print { .noprint { display: none; } }
   @media screen { body { max-width: 210mm; margin: 0 auto; padding: 16mm 18mm 20mm;
                          background: #fff; box-shadow: 0 0 0 100vmax #EFECE5; } }
@@ -3404,7 +3486,8 @@ function payReportHtml(r){
 <h1>เอกสารแนบท้ายบันทึก</h1>
 <div class="sub">รายงานผลการตรวจรับงานจ้างเหมาตัดต้นไม้ใกล้แนวระบบจำหน่าย<br>
 และขออนุมัติเบิกจ่ายเงิน งวดที่ ${esc(r.installment)}</div>
-<div class="docno">เลขที่ ${esc(r.docNoFull || '……………………')}${r.docDate ? ' &nbsp; ลงวันที่ ' + esc(thaiDate(r.docDate)) : ''}</div>
+${draft ? '<div class="draftnote">ฉบับร่าง — ' + esc(r.blockReason || 'รอบนี้ยังไม่ผ่านการตรวจรับ') + ' ใช้ตั้งเบิกไม่ได้</div>' : ''}
+<div class="docno">${draft ? '<b style="color:#B4402E">ฉบับร่าง</b> &nbsp; ' : ''}เลขที่ ${esc(r.docNoFull || '……………………')}${r.docDate ? ' &nbsp; ลงวันที่ ' + esc(thaiDate(r.docDate)) : ''}</div>
 
 <table class="kv">
   <tr><td>หน่วยงาน</td><td>${esc(r.org)}</td></tr>

@@ -113,15 +113,29 @@ function ensureCols_(sheetName, cols) {
   return true;
 }
 
-/** รอบนั้นตรวจรับผ่านแล้วหรือยัง */
-function roundAccepted_(jobId, no) {
-  var found = false;
-  readTable_(TABLES.rounds).rows.forEach(function (r) {
-    if (String(r.JobID) === String(jobId) && Number(r.RoundNo) === Number(no)) {
-      if (String(r.Status || '').indexOf('ตรวจรับแล้ว') >= 0) found = true;
-    }
+/* ============================================================
+   กฎเดียวของทั้งระบบ — รอบนี้ "ผ่านการตรวจรับ" หรือยัง
+   ต้องครบทั้งสองอย่าง  ลงวันตรวจรับ  และ  สถานะเป็น ตรวจรับแล้ว
+   หน้าเว็บใช้กฎเดียวกันนี้ (ฟังก์ชัน roundReady ใน index.html)
+   ============================================================ */
+function roundReadyInfo_(jobId, no) {
+  var r = null;
+  readTable_(TABLES.rounds).rows.forEach(function (x) {
+    if (String(x.JobID) === String(jobId) && Number(x.RoundNo) === Number(no)) r = x;
   });
-  return found;
+  var miss = [];
+  if (!r) {
+    miss.push('ไม่พบรอบที่ ' + no + ' ของใบงานนี้');
+  } else {
+    if (String(r.Status || '').indexOf('ตรวจรับแล้ว') < 0) miss.push('สถานะยังไม่เป็น ตรวจรับแล้ว');
+    if (String(r.AcceptDate || '').trim() === '')          miss.push('ยังไม่ได้ลงวันตรวจรับ');
+  }
+  return { ok: miss.length === 0, missing: miss, text: miss.join(' · '), round: r };
+}
+
+/** รอบนั้นตรวจรับผ่านแล้วหรือยัง — เรียกใช้กฎเดียวข้างบน */
+function roundAccepted_(jobId, no) {
+  return roundReadyInfo_(jobId, no).ok;
 }
 
 function payDocSubject_(job, no) {
@@ -176,8 +190,9 @@ function apiPayDocNo_(p) {
   }
 
   // ยังไม่มีเลข ต้องตรวจรับรอบนั้นก่อน
-  if (!p.peek && !roundAccepted_(jobId, no)) {
-    throw new Error('รอบที่ ' + no + ' ยังไม่ผ่านการตรวจรับ จึงยังออกเลขหนังสือไม่ได้');
+  if (!p.peek) {
+    var rd = roundReadyInfo_(jobId, no);
+    if (!rd.ok) throw new Error('รอบที่ ' + no + ' ยังออกเลขหนังสือไม่ได้ — ' + rd.text);
   }
 
   var date = todayISO_();
@@ -230,3 +245,6 @@ function bookNoTest() {
     return 'เชื่อมต่อไม่สำเร็จ — ' + e.message;
   }
 }
+
+/** ตัวช่วยให้ผลการทดสอบขึ้นในบันทึกการดำเนินการ */
+function bookNoCheck(){ var s = bookNoTest(); console.log(s); return s; }
