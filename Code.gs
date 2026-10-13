@@ -192,7 +192,11 @@ function readTable_(name) {
 }
 
 function normalize_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Bangkok', 'yyyy-MM-dd');
+  if (v instanceof Date) {
+    /* ช่องที่กรอกเป็นเวลาล้วน ชีตเก็บเป็นวันที่ 30 ธ.ค. 1899 ต้องคืนเป็น HH:mm ไม่ใช่วันที่ */
+    if (v.getFullYear() < 1900) return Utilities.formatDate(v, 'Asia/Bangkok', 'HH:mm');
+    return Utilities.formatDate(v, 'Asia/Bangkok', 'yyyy-MM-dd');
+  }
   return v;
 }
 
