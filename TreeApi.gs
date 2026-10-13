@@ -38,14 +38,19 @@ try {
 function makeTreeApiKey() {
   var pr = props_();
   var cur = pr.getProperty(TREE_API_KEY_PROP);
+  var msg;
   if (cur) {
-    return 'มีรหัสอยู่แล้ว\n\n' + cur +
-           '\n\nถ้าต้องการออกรหัสใหม่ ให้ลบคุณสมบัติ TREE_API_KEY ในการตั้งค่าโครงการก่อน';
+    msg = 'มีรหัสอยู่แล้ว ใช้รหัสนี้ได้เลย\n\n' + cur +
+          '\n\nคัดลอกบรรทัดบนไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้' +
+          '\nถ้าต้องการออกรหัสใหม่ ให้ลบคุณสมบัติ TREE_API_KEY ในการตั้งค่าโครงการก่อน';
+  } else {
+    var key = 'tree-' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+    pr.setProperty(TREE_API_KEY_PROP, key);
+    msg = 'สร้างรหัสเรียบร้อย\n\n' + key +
+          '\n\nคัดลอกบรรทัดบนไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้';
   }
-  var key = 'tree-' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
-  pr.setProperty(TREE_API_KEY_PROP, key);
-  return 'สร้างรหัสเรียบร้อย\n\n' + key +
-         '\n\nคัดลอกบรรทัดบนไปใส่ช่อง BOOKNO_KEY ในแท็บ Config ของระบบงานตัดต้นไม้';
+  console.log(msg);
+  return msg;
 }
 
 function treeKeyOk_(k) {
@@ -140,7 +145,7 @@ function treeApiStatus() {
   var info = getYearInfo_(sheet, TREE_ONLY_CATEGORY, yearBE);
   var next = nextNumFromInfo_(TREE_ONLY_CATEGORY, info);
 
-  return [
+  var msg = [
     'รหัสเฉพาะระบบต้นไม้ : ' + (key ? 'ตั้งแล้ว (' + key.length + ' ตัวอักษร)' : 'ยังไม่ได้ตั้ง — ให้รัน makeTreeApiKey'),
     'ขึ้นทะเบียนกับ API  : ' + (registered ? 'เรียบร้อย' : 'ยังไม่ขึ้นทะเบียน — แจ้งผมด้วย'),
     'หมวดที่อนุญาต       : ' + TREE_ONLY_CATEGORY + ' เท่านั้น',
@@ -148,4 +153,6 @@ function treeApiStatus() {
     'ออกไปแล้วปีนี้       : ' + info.used.size + ' เลข',
     'เลขถัดไป            : ' + formatBookNumber(TREE_ONLY_CATEGORY, next, yearBE)
   ].join('\n');
+  console.log(msg);
+  return msg;
 }
