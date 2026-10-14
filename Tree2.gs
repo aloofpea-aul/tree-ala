@@ -17,7 +17,8 @@
 // ====== ตารางใหม่ ======
 var PATROL_COLS = ['PatrolID', 'Date', 'Time', 'By', 'Lat', 'Lng', 'PhotoUrl', 'FileID',
                    'JobID', 'LineCode', 'PlaceName', 'DistM', 'Severity', 'Note',
-                   'Status', 'FindID', 'Notified', 'SrcApp', 'SrcID'];
+                   'Status', 'FindID', 'Notified', 'SrcApp', 'SrcID',
+                   'DelBy', 'DelAt', 'DelWhy'];
 
 var COMMITTEE_COLS = ['Year', 'Seq', 'Name', 'Position', 'Role', 'Active', 'Note'];
 
@@ -34,6 +35,9 @@ function apiTree2_(p) {
     case 'patrolNear':    return apiPatrolNear_(p);
     case 'patrolAssign':  return apiPatrolAssign_(p);
     case 'patrolPull':    return apiPatrolPull_(p);   // อยู่ในไฟล์ PatrolLink.gs
+    case 'patrolEdit':    return apiPatrolEdit_(p);
+    case 'patrolDelete':  return apiPatrolDelete_(p);
+    case 'patrolRestore': return apiPatrolRestore_(p);
     case 'committeeGet':  return apiCommitteeGet_(p);
     case 'committeeSave': return apiCommitteeSave_(p);
     case 'payReport':     return apiPayReport_(p);
@@ -348,6 +352,9 @@ function apiPatrolList_(p) {
   });
   if (p.openOnly) rows = rows.filter(function (r) { return String(r.Status) === 'แจ้งแล้ว'; });
   var f = String(p.filter || '').trim();
+  /* ของในถังขยะไม่โผล่ในหมวดไหนเลย นอกจากหมวดถังขยะเอง */
+  if (f === 'deleted') rows = rows.filter(function (r) { return String(r.Status) === PATROL_DEL; });
+  else                 rows = rows.filter(function (r) { return String(r.Status) !== PATROL_DEL; });
   if (f === 'waiting') rows = rows.filter(function (r) {
     var st = String(r.Status || ''); return st !== 'ปิดเรื่อง' && st !== 'เปิดเป็นจุดที่พบแล้ว'; });
   if (f === 'urgent')  rows = rows.filter(function (r) {
@@ -408,6 +415,127 @@ function apiPatrolClose_(p) {
 }
 
 /* ============================================================
+   แก้ไข · ลบลงถังขยะ · กู้คืน
+   ============================================================ */
+
+var PATROL_DEL = 'ลบแล้ว';
+var PATROL_DEL_WHY = ['แจ้งผิดจุด', 'ไม่ใช่งานตัดต้นไม้', 'แจ้งซ้ำกับเรื่องอื่น',
+                      'ตัดไปแล้ว', 'ทดสอบระบบ'];
+
+/** คอลัมน์ที่เพิ่มทีหลัง เติมหัวตารางให้เองถ้าชีตยังไม่มี */
+function patrolEnsureCols_() {
+  var sh = db_().getSheetByName(TABLES2.patrol);
+  if (!sh) return;
+  var last = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, last).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  PATROL_COLS.forEach(function (name) {
+    if (headers.indexOf(name) >= 0) return;
+    last += 1;
+    sh.getRange(1, last).setValue(name);
+    headers.push(name);
+  });
+}
+
+function patrolFind_(id) {
+  var cur = null;
+  readTable_(TABLES2.patrol).rows.forEach(function (r) { if (r.PatrolID === id) cur = r; });
+  if (!cur) throw new Error('ไม่พบรายการพาโทรลนี้');
+  return cur;
+}
+
+function patrolMayEdit_(cur, u) {
+  if (String(cur.By) !== u.name && !isSupervisor_(u.name))
+    throw new Error('แก้ไขหรือลบได้เฉพาะผู้แจ้งเอง หรือผู้จัดการและหัวหน้าแผนก');
+}
+
+/** แก้ไขเรื่องพาโทรล — ส่งมาเฉพาะช่องที่อยากแก้ */
+function apiPatrolEdit_(p) {
+  var u = requireUser_(p);
+  patrolEnsureCols_();
+  var cur = patrolFind_(p.patrolId);
+  patrolMayEdit_(cur, u);
+  if (String(cur.Status) === PATROL_DEL)
+    throw new Error('เรื่องนี้อยู่ในถังขยะ กู้คืนก่อนจึงจะแก้ได้');
+
+  var promoted = String(cur.FindID || '').trim() !== '';
+  var f = {}, changed = [];
+
+  if (p.severity !== undefined && String(p.severity) !== String(cur.Severity)) {
+    f.Severity = String(p.severity) === 'เร่งด่วน' ? 'เร่งด่วน' : 'ปกติ';
+    changed.push('ความรุนแรง');
+  }
+  if (p.note !== undefined && String(p.note) !== String(cur.Note)) {
+    f.Note = String(p.note);
+    changed.push('หมายเหตุ');
+  }
+  if (p.lat !== undefined && p.lng !== undefined &&
+      (String(p.lat) !== String(cur.Lat) || String(p.lng) !== String(cur.Lng))) {
+    if (promoted) throw new Error('เรื่องนี้เปิดเป็นจุดที่พบในใบงานแล้ว แก้พิกัดที่จุดที่พบแทน');
+    var la = parseFloat(p.lat), ln = parseFloat(p.lng);
+    if (!isFinite(la) || !isFinite(ln)) throw new Error('พิกัดไม่ถูกต้อง');
+    f.Lat = la; f.Lng = ln;
+    changed.push('พิกัด');
+  }
+  if (p.jobId !== undefined && String(p.jobId) !== String(cur.JobID)) {
+    if (promoted) throw new Error('เรื่องนี้เปิดเป็นจุดที่พบในใบงานแล้ว เปลี่ยนใบงานไม่ได้');
+    f.JobID     = String(p.jobId || '');
+    f.LineCode  = String(p.lineCode || '');
+    f.PlaceName = String(p.placeName || '');
+    f.DistM     = (p.distM === undefined || p.distM === '') ? '' : p.distM;
+    changed.push('ไลน์ที่ผูก');
+  }
+
+  if (!changed.length) return { ok: true, changed: [] };
+  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId, f);
+  log_(u.name, 'patrolEdit', p.patrolId, changed.join(','));
+  bumpStamp_();
+  return { ok: true, changed: changed };
+}
+
+/** ลบลงถังขยะ ไม่ได้ลบแถวทิ้ง กู้คืนได้ */
+function apiPatrolDelete_(p) {
+  var u = requireUser_(p);
+  patrolEnsureCols_();
+  var cur = patrolFind_(p.patrolId);
+  patrolMayEdit_(cur, u);
+  if (String(cur.FindID || '').trim())
+    throw new Error('เรื่องนี้เปิดเป็นจุดที่พบในใบงานแล้ว ลบไม่ได้ ต้องไปจัดการที่จุดที่พบก่อน');
+  if (String(cur.Status) === PATROL_DEL) return { ok: true, already: true };
+
+  var why = String(p.reason || '').trim();
+  if (!why) throw new Error('ลบต้องเลือกเหตุผลก่อน');
+
+  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId, {
+    Status: PATROL_DEL,
+    DelBy:  u.name,
+    DelAt:  Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'),
+    DelWhy: why
+  });
+  try { plkOnDelete_(cur, why, u.name); } catch (e) {}
+  log_(u.name, 'patrolDelete', p.patrolId, why);
+  bumpStamp_();
+  return { ok: true, reason: why };
+}
+
+/** กู้คืนจากถังขยะ */
+function apiPatrolRestore_(p) {
+  var u = requireUser_(p);
+  patrolEnsureCols_();
+  var cur = patrolFind_(p.patrolId);
+  patrolMayEdit_(cur, u);
+  if (String(cur.Status) !== PATROL_DEL) return { ok: true, already: true };
+
+  updateRow_(TABLES2.patrol, 'PatrolID', p.patrolId, {
+    Status: 'แจ้งแล้ว', DelBy: '', DelAt: '', DelWhy: ''
+  });
+  try { plkOnRestore_(cur); } catch (e) {}
+  log_(u.name, 'patrolRestore', p.patrolId, '');
+  bumpStamp_();
+  return { ok: true };
+}
+
+/* ============================================================
    เพิ่มเติม — สรุปจำนวน หาไลน์ใกล้สุด และผูกเรื่องนอกแผนเข้าใบงาน
    ============================================================ */
 
@@ -415,9 +543,11 @@ function apiPatrolClose_(p) {
 function apiPatrolSummary_(p) {
   requireUser_(p);
   var rows = readTable_(TABLES2.patrol).rows;
-  var waiting = 0, urgent = 0, matched = 0, outplan = 0, closed = 0;
+  var waiting = 0, urgent = 0, matched = 0, outplan = 0, closed = 0, deleted = 0, live = 0;
   rows.forEach(function (r) {
     var st = String(r.Status || '');
+    if (st === PATROL_DEL) { deleted++; return; }
+    live++;
     var open = st !== 'ปิดเรื่อง' && st !== 'เปิดเป็นจุดที่พบแล้ว';
     if (open) {
       waiting++;
@@ -426,7 +556,7 @@ function apiPatrolSummary_(p) {
     } else if (st === 'ปิดเรื่อง') closed++;
   });
   return { ok: true, waiting: waiting, urgent: urgent, matched: matched,
-           outplan: outplan, closed: closed, total: rows.length };
+           outplan: outplan, closed: closed, deleted: deleted, total: live };
 }
 
 /** ไลน์ในแผนที่ใกล้จุดนั้นที่สุด ไม่จำกัดรัศมี ใช้ตอนเรื่องอยู่นอกแผน */
