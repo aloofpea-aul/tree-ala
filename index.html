@@ -480,7 +480,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14d';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14e';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -3417,6 +3417,36 @@ async function patrolLocate(){
   }
 }
 
+/* บล็อกรอบการตัด ใช้ทั้งหน้าถ่ายรูปและหน้ารายละเอียด */
+function planRoundBlock(r){
+  if(!r || !r.ok) return '';
+  const rows = [];
+  rows.push(['ตัดรอบที่แล้ว', r.lastDate
+    ? `รอบที่ ${esc(r.lastNo)} · ${esc(thaiDateShort(r.lastDate))} · <b>ผ่านมาแล้ว ${esc(r.daysSince)} วัน</b>`
+    : 'ยังไม่ได้ตัดสักรอบในปีนี้']);
+  if(r.doneAll){
+    rows.push(['รอบถัดไป', `ตรวจรับครบทั้ง ${esc(r.total)} รอบแล้ว`]);
+  }else{
+    rows.push(['รอบถัดไป', `รอบที่ ${esc(r.nextNo)}${r.planMonth ? ' ตามแผนเดือน ' + esc(r.planMonth) : ''}`]);
+    if(r.dueDate){
+      const left = (r.daysLeft < 0)
+        ? `<b style="color:var(--bad)">เกินกำหนดมาแล้ว ${esc(-r.daysLeft)} วัน</b>`
+        : `<b style="color:${r.daysLeft <= 30 ? 'var(--warn)' : 'var(--ok)'}">อีก ${esc(r.daysLeft)} วัน</b>`;
+      rows.push(['ครบกำหนด', `${esc(thaiDateShort(r.dueDate))} · ${left}`]);
+    }
+  }
+  return rows.map(([k,v]) => `<div class="sub">${esc(k)}</div><div>${v}</div>`).join('');
+}
+
+/* สรุปรอบตัดแบบบรรทัดเดียว ใช้ในรายการไลน์ใกล้เคียง */
+function roundOneLine(r){
+  if(!r || !r.ok) return '';
+  if(r.doneAll) return 'ตรวจรับครบทุกรอบแล้ว';
+  if(r.daysLeft === undefined || r.daysLeft === null) return r.nextNo ? ('รอบถัดไป รอบที่ ' + r.nextNo) : '';
+  return r.daysLeft < 0 ? ('รอบที่ ' + r.nextNo + ' เกินกำหนด ' + (-r.daysLeft) + ' วัน')
+                        : ('รอบที่ ' + r.nextNo + ' อีก ' + r.daysLeft + ' วัน');
+}
+
 function patrolRender(radius){
   const box = $('#ptBody');
   if(!box) return;
@@ -3430,7 +3460,7 @@ function patrolRender(radius){
           <div class="kanit" style="font-size:17px">${esc(top.lineCode)}</div>
           <div class="sub">${esc(top.placeName || '')}</div>
         </div>
-        <span class="pill p-ok">ห่าง ${esc(top.distM)} ม.</span>
+        <span class="pill p-ok">ห่างแนวสาย ${esc(top.distM)} ม.</span>
       </div>
       <div style="margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
         <div class="sub">ใบงาน</div><div style="font-weight:600">${esc(top.mjmNo || top.jobId)}</div>
@@ -3438,15 +3468,15 @@ function patrolRender(radius){
         <div class="sub">ฟีดเดอร์</div><div>${esc(top.feeder || '-')} · ${esc(top.voltLevel || top.system || '')}</div>
         <div class="sub">ผู้รับจ้าง</div><div>${esc(top.contractor || '-')}</div>
         <div class="sub">ระยะทางแผน</div><div>${esc(top.planKm || '-')} กม.</div>
-        <div class="sub">ตัดแล้ว</div><div>${['r1','r2','r3'].map((k,i)=>
-            (top.cut[k] ? `รอบ ${i+1} ${esc(thaiDateShort(top.cut[k]))}` : '')).filter(Boolean).join(' · ') || 'ยังไม่ได้ตัดสักรอบ'}</div>
+        ${top.segFrom ? `<div class="sub">ช่วงสาย</div><div>${esc(top.segFrom)}${top.segTo ? ' ถึง ' + esc(top.segTo) : ''}</div>` : ''}
+        ${planRoundBlock(top.round)}
       </div>
       <button class="btn ghost" style="margin-top:12px;width:100%;height:38px"
         onclick="closeSheet();openLineInfo('${esc(top.lineCode)}')">เปิดรายละเอียดไลน์นี้</button>
     </div>` : `
     <div class="card" style="border-left:4px solid var(--warn)">
-      <div style="font-weight:600">ไม่อยู่ในรัศมี ${esc(radius)} เมตร ของไลน์ไหนในแผนปี ${esc(S.year)}</div>
-      <div class="sub" style="margin-top:6px">แจ้งได้ตามปกติ ระบบจะเก็บเป็นข้อมูลนอกแผนไว้ให้</div>
+      <div style="font-weight:600">ไม่มีแนวสายในแผนอยู่ในรัศมี ${esc(radius)} เมตร</div>
+      <div class="sub" style="margin-top:6px">วัดตั้งฉากจากแนวสายจริง ไม่ใช่จากเสาต้นเดียว · แจ้งได้ตามปกติ ระบบจะเก็บเป็นข้อมูลนอกแผนไว้ให้ แล้วผูกกับใบงานทีหลังได้</div>
     </div>`;
 
   const others = PT.matches.slice(1);
@@ -3455,7 +3485,8 @@ function patrolRender(radius){
       <div class="plabel">ไลน์อื่นที่อยู่ใกล้</div>
       ${others.map(m => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line2)">
         <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600">${esc(m.lineCode)}</div>
-        <div class="sub">${esc(m.placeName||'')} · ${esc(m.mjmNo||'')}</div></div>
+        <div class="sub">${esc(m.mjmNo||'')} · ${esc(m.contractor||'-')}</div>
+        <div class="sub">${esc(roundOneLine(m.round))}</div></div>
         <span class="pill p-gray">${esc(m.distM)} ม.</span></div>`).join('')}
     </div>` : '';
 
@@ -3919,6 +3950,7 @@ async function openPatrolItem(id){
   PL.item = r;
   patrolItemRender();
   if(!String(r.JobID||'').trim() && String(r.Status||'') !== 'ปิดเรื่อง') patrolLoadNear(id);
+  else if(String(r.JobID||'').trim()) patrolLoadPlan(id);
 }
 
 function patrolItemRender(extra){
@@ -3987,20 +4019,46 @@ function photoThumbBig(r){
 }
 
 /* ---------- นอกแผน: ไลน์ใกล้สุดสามเส้น ---------- */
+/* เรื่องที่ตรงกับแผนแล้ว ดึงรายละเอียดแผนและรอบตัดมาแสดงเพิ่ม */
+async function patrolLoadPlan(id){
+  try{
+    const r = PL.item;
+    const out = await tree2('patrolNear', {patrolId: id, year: S.year, limit: 4, radius: 400});
+    const list = out.near || [];
+    const code = String(r.LineCode||'').replace(/\s+/g,'').toUpperCase();
+    const m = list.find(x => String(x.lineCode||'').replace(/\s+/g,'').toUpperCase() === code) || list[0];
+    if(!m || PL.item !== r) return;
+    patrolItemRender(`
+      <div class="card fadein" style="border-left:4px solid var(--ok)">
+        <div class="plabel">แผนงานและรอบตัด</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+          ${m.segFrom ? `<div class="sub">ช่วงสาย</div><div>${esc(m.segFrom)}${m.segTo ? ' ถึง ' + esc(m.segTo) : ''}</div>` : ''}
+          <div class="sub">ห่างแนวสาย</div><div style="font-weight:600">${esc(m.distM)} เมตร</div>
+          <div class="sub">ใบงาน</div><div style="font-weight:600">${esc(m.mjmNo || m.jobId)}</div>
+          <div class="sub">ชื่องาน</div><div>${esc(m.jobName || '-')}</div>
+          <div class="sub">ผู้รับจ้าง</div><div style="font-weight:600">${esc(m.contractor || '-')}</div>
+          <div class="sub">ฟีดเดอร์</div><div>${esc(m.feeder || '-')} · ${esc(m.voltLevel || m.system || '')} · แผน ${esc(m.planKm || '-')} กม.</div>
+          ${planRoundBlock(m.round)}
+        </div>
+      </div>`);
+  }catch(e){ /* ไม่ขึ้นก็ไม่เป็นไร หน้าหลักยังใช้ได้ */ }
+}
+
 async function patrolLoadNear(id){
   try{
     const out = await tree2('patrolNear', {patrolId: id, year: S.year, limit: 3});
     const near = out.near || [];
     const html = `
       <div class="card" style="border-left:4px solid var(--warn)">
-        <div style="font-weight:600">ไม่อยู่ในรัศมีของไลน์ไหนในแผนปี ${esc(S.year)}</div>
+        <div style="font-weight:600">ไม่มีแนวสายในแผนอยู่ในรัศมี</div>
         <div class="plabel" style="margin-top:12px">ไลน์ที่ใกล้ที่สุด เลือกผูกได้เลย</div>
         ${near.length ? near.map(n => `
           <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line2)">
             <div style="flex:1;min-width:0">
               <div style="font-size:13.5px;font-weight:600">${esc(n.lineCode)}
-                <span class="sub" style="font-weight:400"> · ห่าง ${esc(n.distM)} ม.</span></div>
-              <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.placeName||'')} · ${esc(n.mjmNo||'')}</div>
+                <span class="sub" style="font-weight:400"> · ห่างแนวสาย ${esc(n.distM)} ม.</span></div>
+              <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.mjmNo||'')} · ${esc(n.contractor||'-')}</div>
+              <div class="sub">${esc(roundOneLine(n.round))}</div>
             </div>
             <button class="btn" style="height:34px;padding:0 12px;flex-shrink:0"
               onclick="patrolAssign('${esc(n.jobId)}','${esc(n.lineCode)}',${Number(n.distM)||0},'${esc((n.placeName||'').replace(/'/g,''))}')">ผูกกับใบนี้</button>
