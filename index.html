@@ -64,6 +64,14 @@ main{flex:1;padding:20px;background:var(--ground)}
 .grid{display:grid;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
 .kpi .n{font-family:'Kanit';font-size:30px;font-weight:600;line-height:1.2}
+/* การ์ดตัวเลขในแท็บตรวจสอบ กดเปิดรายการข้างในได้ ใบที่เป็นศูนย์จะจาง */
+.kpi.kclick{cursor:pointer;position:relative;transition:box-shadow .15s ease, transform .1s ease}
+.kpi.kclick:hover{box-shadow:0 3px 14px rgba(74,29,98,.16);border-color:var(--pea2)}
+.kpi.kclick:active{transform:scale(.99)}
+.kpi.kzero{cursor:pointer;opacity:.72}
+.kpi .ktag{position:absolute;right:12px;bottom:12px;font-size:10px;font-weight:700;
+  color:var(--pea);background:var(--pea-soft);border-radius:999px;padding:2px 9px}
+@media (max-width:760px){ .kpi .ktag{position:static;display:inline-block;margin-top:7px} }
 .lbl{font-size:12px;color:var(--dim)}
 .sub{font-size:12px;color:var(--muted)}
 .bar{height:10px;border-radius:5px;background:#EDEAE3;display:flex;gap:2px;overflow:hidden}
@@ -489,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14g';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14h';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -1100,16 +1108,172 @@ function checkQueue(){
   };
 }
 
+/* กรองทุกอย่างในแท็บตรวจสอบด้วยผู้รับจ้างคนเดียวกัน เพราะเวลาออกตรวจแยกผู้รับจ้างอยู่แล้ว */
+let checkFilter = { contractor: '' };
+
+function checkView(){
+  const q = checkQueue();
+  const c = checkFilter.contractor;
+  const jobById = {}; (S.data.jobs||[]).forEach(j => jobById[j.JobID] = j);
+  const fr = list => list.filter(r => sameContractor(r.job, c));
+  return {
+    jobById,
+    cons: contractorList(q.rows.map(r => r.job)),
+    overdue: fr(q.overdue), soon: fr(q.soon), later: fr(q.later),
+    risk: q.risk.filter(f => sameContractor(jobById[f.JobID], c))
+  };
+}
+
+/* แถวหนึ่งไลน์ในคิวงาน ใช้ทั้งในหน้าตรวจสอบและในรายการที่กดการ์ดเปิดขึ้นมา */
+function ckLineRow(r){
+  return `<div style="display:flex;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--line2)">
+      <div style="width:52px;flex-shrink:0;text-align:center">
+        <div style="font-family:'Kanit';font-size:17px;font-weight:600;color:${r.over>0?'var(--bad)':'var(--warn)'}">
+          ${r.over > 0 ? '+' + r.over : Math.abs(r.over)}</div>
+        <div style="font-size:10px;color:var(--dim)">${r.over > 0 ? 'วันที่เกิน' : 'วันที่เหลือ'}</div>
+      </div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openLineInfo('${esc(r.line.LineCode||'')}')">
+        <div style="font-size:13.5px;font-weight:600">${esc(r.line.LineCode||'(ไม่มีรหัส)')} · ${esc(r.line.PlaceName||'')}</div>
+        <div class="sub">รอบ ${r.no} · ${esc(r.month)} · ${esc(r.job.Contractor||'ยังไม่ระบุผู้รับจ้าง')}${
+          r.impact ? ' · กระทบ ' + fmt0(r.impact) + ' ราย' : ''}</div>
+      </div>
+      <button class="btn ghost" style="height:34px;padding:0 11px;font-size:12px;flex-shrink:0"
+        onclick="openAccept('${esc(r.job.JobID)}',${r.no})">ลงผล</button>
+    </div>`;
+}
+
+/* กดการ์ดแล้วเปิดรายการข้างใน */
+function openCheckList(kind){
+  const v = checkView();
+  const T = {overdue:['เกินกำหนดแล้ว', v.overdue], soon:['ใกล้ถึงกำหนด', v.soon], later:['ยังไม่ถึงกำหนด', v.later]};
+  if(kind === 'risk') return openRiskList();
+  const [title, list] = T[kind] || T.overdue;
+  if(!list.length){ toast('ไม่มีรายการในกลุ่มนี้' + (checkFilter.contractor ? ' ของ ' + checkFilter.contractor : '')); return; }
+  openSheet(title, list.length + ' ไลน์ · ปี ' + S.year, `<div id="ckBody"></div>`);
+  CK.kind = kind;
+  ckListRender();
+}
+let CK = { kind: 'overdue' };
+
+function ckListRender(){
+  const box = $('#ckBody');
+  if(!box) return;
+  const v = checkView();
+  const list = (CK.kind === 'soon' ? v.soon : CK.kind === 'later' ? v.later : v.overdue).slice(0, 80);
+  box.innerHTML = `
+    ${ckContractorBox('ckListRender')}
+    ${list.length ? `<div class="card" style="padding-top:2px">${list.map(ckLineRow).join('')}</div>`
+                  : `<div class="card"><div class="sub">ไม่มีรายการในกลุ่มนี้</div></div>`}
+    ${list.length >= 80 ? '<div class="sub" style="text-align:center">แสดง 80 รายการแรก</div>' : ''}`;
+}
+
+/* ช่องเลือกผู้รับจ้าง ใช้ร่วมกันทั้งหน้าตรวจสอบและแผ่นที่เปิดจากการ์ด */
+function ckContractorBox(after){
+  const v = checkView();
+  if(!v.cons.length) return '';
+  return `<select class="inp" style="width:100%;height:40px;margin-bottom:10px"
+      onchange="checkFilter.contractor=this.value;${after}()">
+      <option value="">ทุกผู้รับจ้าง</option>
+      ${v.cons.map(c=>`<option ${checkFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+    </select>`;
+}
+
+/* รายการจุดที่พบที่ยังไม่ได้ปรับปรุง */
+function openRiskList(){
+  const v = checkView();
+  if(!v.risk.length){ toast('ไม่มีจุดที่ค้างอยู่'); return; }
+  openSheet('จุดเสี่ยงค้างอยู่', v.risk.length + ' จุด · ยังไม่ได้ปรับปรุง', `<div id="rkBody"></div>`);
+  riskListRender();
+}
+function riskListRender(){
+  const box = $('#rkBody');
+  if(!box) return;
+  const v = checkView();
+  box.innerHTML = `${ckContractorBox('riskListRender')}
+    ${v.risk.length ? `<div class="card" style="padding-top:2px">${v.risk.map(f=>riskRow(f, v.jobById)).join('')}</div>`
+                    : `<div class="card"><div class="sub">ไม่มีจุดที่ค้างอยู่</div></div>`}`;
+}
+function riskRow(f, jobById){
+  const j = (jobById || {})[f.JobID] || {};
+  return `<div class="plrow" onclick="openRiskItem('${esc(f.FindID)}')">
+      ${f.PhotoBefore?`<img class="plth" src="${esc(f.PhotoBefore)}" alt="" loading="lazy">`
+                     :`<div class="plth" style="background:var(--line2)"></div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13.5px;font-weight:600">${esc(f.DeviceID||'หมุดอิสระ')} ${esc(f.TreeType||'')}</div>
+        <div class="sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.Note||'—')}</div>
+        <div class="sub">${esc(j.MJMNo||f.JobID||'')} · ${esc(j.Contractor||'ยังไม่ระบุผู้รับจ้าง')}</div>
+      </div>
+      <span class="pill ${String(f.Severity||'').indexOf('เสี่ยง')>=0?'p-bad':'p-gray'}"
+        style="flex-shrink:0;align-self:flex-start">${esc(f.Severity||'ปกติ')}</span>
+    </div>`;
+}
+
+/* รายละเอียดจุดที่พบ พร้อมปุ่มลงว่าปรับปรุงแล้ว */
+function openRiskItem(findId){
+  const f = (S.data.findings||[]).find(x => x.FindID === findId);
+  if(!f){ toast('ไม่พบจุดนี้'); return; }
+  const j = (S.data.jobs||[]).find(x => x.JobID === f.JobID) || {};
+  const done = String(f.Status||'') === 'ปรับปรุงแล้ว';
+  const map = (f.Lat && f.Lng)
+    ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(f.Lat + ',' + f.Lng) : '';
+  openSheet('จุดที่พบ', esc(findId) + ' · ' + esc(f.Status||''), `
+    ${f.PhotoBefore?`<img src="${esc(f.PhotoBefore)}" alt="" style="width:100%;border-radius:12px;margin-bottom:10px">`:''}
+    <div class="card">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <span class="pill ${done?'p-ok':'p-warn'}">${esc(f.Status||'รอปรับปรุง')}</span>
+        <span class="pill ${String(f.Severity||'').indexOf('เสี่ยง')>=0?'p-bad':'p-gray'}">${esc(f.Severity||'ปกติ')}</span>
+        ${String(f.Note||'').indexOf('จากการพาโทรล')>=0?'<span class="pill p-src">มาจากพาโทรล</span>':''}
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13.5px">
+        <div class="sub">เรื่อง</div><div>${esc(f.Note||'—')}</div>
+        <div class="sub">จุด</div><div>${esc(f.DeviceID||'หมุดอิสระ')}${f.TreeType?' · '+esc(f.TreeType):''}</div>
+        <div class="sub">ใบงาน</div><div style="font-weight:600">${esc(j.MJMNo||f.JobID||'—')}</div>
+        <div class="sub">ผู้รับจ้าง</div><div style="font-weight:600">${esc(j.Contractor||'—')}</div>
+        <div class="sub">แจ้งเมื่อ</div><div>${esc(thaiDateShort(f.ReportDate))} · ${esc(f.Reporter||'')}</div>
+        ${f.FixedDate?`<div class="sub">ปรับปรุงเมื่อ</div><div>${esc(thaiDateShort(f.FixedDate))}</div>`:''}
+        ${(f.Lat&&f.Lng)?`<div class="sub">พิกัด</div><div>${esc(String(f.Lat).slice(0,9))}, ${esc(String(f.Lng).slice(0,9))}</div>`:''}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      ${map?`<a class="btn ghost" style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;text-decoration:none"
+          href="${map}" target="_blank" rel="noopener">เปิดแผนที่</a>`:''}
+      ${f.JobID?`<button class="btn ghost" style="flex:1;height:42px"
+          onclick="closeSheet();openJob('${esc(f.JobID)}')">เปิดใบงาน</button>`:''}
+    </div>
+    <button class="btn ${done?'ghost':''}" id="rkFixBtn" style="width:100%;height:46px"
+      onclick="riskToggle('${esc(findId)}',${done?'false':'true'})">
+      ${done?'ยกเลิก กลับเป็นรอปรับปรุง':'ลงว่าปรับปรุงแล้ว'}</button>
+    <div class="sub" style="margin-top:8px;text-align:center">${done?'จุดนี้ไม่นับอยู่ในที่ค้างแล้ว':'ลงแล้วจะหายออกจากการ์ดทันที'}</div>`);
+}
+
+async function riskToggle(findId, on){
+  const f = (S.data.findings||[]).find(x => x.FindID === findId);
+  if(!f) return;
+  btnBusy('#rkFixBtn', true, 'กำลังบันทึก…');
+  const fields = { Status: on ? 'ปรับปรุงแล้ว' : 'รอปรับปรุง', FixedDate: on ? todayStore() : '' };
+  try{
+    await api('fixFinding', {findId, fields});
+    Object.assign(f, fields);
+    closeSheet();
+    toast(on ? 'ลงว่าปรับปรุงแล้ว' : 'กลับเป็นรอปรับปรุงแล้ว');
+    if(S.view === 'check') renderCheck();
+  }catch(e){
+    btnBusy('#rkFixBtn', false, on?'ลงว่าปรับปรุงแล้ว':'ยกเลิก กลับเป็นรอปรับปรุง');
+    toast(e.message, 5000);
+  }
+}
+
 function renderCheck(){
   if(!S.sld) ensureSld().then(()=>{ if(S.view==='check') renderCheck(); });
   if(!PL.sum) patrolBadgeRefresh().then(()=>{ if(S.view==='check') renderCheck(); });
-  const q = checkQueue();
+  const q = checkView();
   const show = (q.overdue.length ? q.overdue : q.soon).slice(0, 60);
-  const kpi = (lbl, n, sub, col) => `
-    <div class="card kpi" style="padding:14px">
+  const kpi = (lbl, n, sub, col, kind) => `
+    <div class="card kpi ${n?'kclick':'kzero'}" style="padding:14px" onclick="openCheckList('${kind}')">
       <div class="lbl">${lbl}</div>
       <div class="n" style="font-size:24px;${col?'color:'+col:''}">${n}</div>
       <div class="sub" style="font-size:11px">${sub}</div>
+      ${n?'<span class="ktag">แตะดูรายการ</span>':''}
     </div>`;
 
   const ps = PL.sum || {};
@@ -1139,11 +1303,17 @@ function renderCheck(){
         onclick="openPatrolList('${'waiting'}')">เปิดรายการพาโทรล</button>
     </div>
 
+    ${q.cons.length ? `<select class="inp" style="width:100%;height:42px;margin-bottom:12px"
+        onchange="checkFilter.contractor=this.value;renderCheck()">
+        <option value="">ทุกผู้รับจ้าง</option>
+        ${q.cons.map(c=>`<option ${checkFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>` : ''}
+
     <div class="grid kpigrid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:14px">
-      ${kpi('เกินกำหนดแล้ว', q.overdue.length, 'ไลน์แยกที่ยังไม่ตัด', q.overdue.length?'var(--bad)':'')}
-      ${kpi('ใกล้ถึงกำหนด', q.soon.length, 'ภายใน 30 วัน', q.soon.length?'var(--warn)':'')}
-      ${kpi('ยังไม่ถึงกำหนด', q.later.length, 'ตามแผนปี ' + esc(S.year))}
-      ${kpi('จุดเสี่ยงค้างอยู่', q.risk.length, 'จากการบันทึกหน้างาน', q.risk.length?'var(--bad)':'')}
+      ${kpi('เกินกำหนดแล้ว', q.overdue.length, 'ไลน์แยกที่ยังไม่ตัด', q.overdue.length?'var(--bad)':'', 'overdue')}
+      ${kpi('ใกล้ถึงกำหนด', q.soon.length, 'ภายใน 30 วัน', q.soon.length?'var(--warn)':'', 'soon')}
+      ${kpi('ยังไม่ถึงกำหนด', q.later.length, 'ตามแผนปี ' + esc(S.year), '', 'later')}
+      ${kpi('จุดเสี่ยงค้างอยู่', q.risk.length, 'จากการบันทึกหน้างาน', q.risk.length?'var(--bad)':'', 'risk')}
     </div>
 
     <div class="card" style="margin-bottom:14px">
@@ -1152,21 +1322,7 @@ function renderCheck(){
         เรียงจากเกินกำหนดมากที่สุด ถ้าเกินเท่ากันเรียงตามจำนวนผู้ใช้ไฟที่จะกระทบ
         ${S.sld ? '' : ' · กำลังดึงจำนวนผู้ใช้ไฟจากผัง SLD'}
       </div>
-      ${show.length ? show.map(r => `
-        <div style="display:flex;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--line2)">
-          <div style="width:52px;flex-shrink:0;text-align:center">
-            <div style="font-family:'Kanit';font-size:17px;font-weight:600;color:${r.over>0?'var(--bad)':'var(--warn)'}">
-              ${r.over > 0 ? '+' + r.over : Math.abs(r.over)}</div>
-            <div style="font-size:10px;color:var(--dim)">${r.over > 0 ? 'วันที่เกิน' : 'วันที่เหลือ'}</div>
-          </div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13.5px;font-weight:600">${esc(r.line.LineCode||'(ไม่มีรหัส)')} · ${esc(r.line.PlaceName||'')}</div>
-            <div class="sub">รอบ ${r.no} · ${esc(r.month)} · ${esc(r.job.Contractor||'ยังไม่ระบุผู้รับจ้าง')}${
-              r.impact ? ' · กระทบ ' + fmt0(r.impact) + ' ราย' : ''}</div>
-          </div>
-          <button class="btn ghost" style="height:34px;padding:0 11px;font-size:12px;flex-shrink:0"
-            onclick="openAccept('${esc(r.job.JobID)}',${r.no})">ลงผล</button>
-        </div>`).join('')
+      ${show.length ? show.map(ckLineRow).join('')
         : '<div class="sub" style="padding-top:10px">ไม่มีไลน์ค้างในช่วงนี้ — ตัดครบตามแผนแล้ว</div>'}
       ${show.length >= 60 ? '<div class="sub" style="padding-top:10px">แสดง 60 รายการแรกจาก ' + (q.overdue.length||q.soon.length) + '</div>' : ''}
     </div>
@@ -1174,15 +1330,10 @@ function renderCheck(){
     ${q.risk.length ? `
     <div class="card">
       <h3 style="font-size:16px;margin-bottom:4px">จุดเสี่ยงที่บันทึกไว้หน้างาน</h3>
-      <div class="sub" style="margin-bottom:6px">ยังไม่ได้ปรับปรุง ${q.risk.length} จุด</div>
-      ${q.risk.slice(0,20).map(f => `
-        <div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line2)">
-          ${f.PhotoBefore?`<img src="${esc(f.PhotoBefore)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:8px;flex-shrink:0">`:''}
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13.5px;font-weight:600">${esc(f.DeviceID||'หมุดอิสระ')} · ${esc(f.TreeType||'')}</div>
-            <div class="sub">${esc(f.Severity||'')} · แจ้ง ${esc(f.ReportDate||'')} โดย ${esc(f.Reporter||'')}</div>
-          </div>
-        </div>`).join('')}
+      <div class="sub" style="margin-bottom:6px">ยังไม่ได้ปรับปรุง ${q.risk.length} จุด · แตะเพื่อดูและลงผล</div>
+      ${q.risk.slice(0,20).map(f => riskRow(f, q.jobById)).join('')}
+      ${q.risk.length > 20 ? `<button class="btn ghost" style="width:100%;height:38px;margin-top:8px"
+        onclick="openRiskList()">ดูทั้งหมด ${q.risk.length} จุด</button>` : ''}
     </div>` : ''}`;
 }
 
@@ -2228,7 +2379,16 @@ function todoList(s){
 }
 
 /* ---------- รายการใบงาน ---------- */
-let jobFilter = {q:'', sys:'', feeder:'', group:''};
+let jobFilter = {q:'', sys:'', feeder:'', group:'', contractor:''};
+
+/* รายชื่อผู้รับจ้างที่มีจริงในแผนปีนี้ ใช้ร่วมกันทุกที่ที่มีรายการใบงาน */
+function contractorList(jobs){
+  return [...new Set((jobs||[]).map(j => String(j.Contractor||'').trim()).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b,'th'));
+}
+function sameContractor(j, name){
+  return !name || String((j||{}).Contractor||'').trim() === name;
+}
 
 function renderJobs(){
   const s = summarize();
@@ -2238,6 +2398,7 @@ function renderJobs(){
   const list = s.jobs.filter(j => {
     if(jobFilter.sys && j.System !== jobFilter.sys) return false;
     if(jobFilter.feeder && j.FeederID !== jobFilter.feeder) return false;
+    if(!sameContractor(j, jobFilter.contractor)) return false;
     if(jobFilter.group && String(j.MonthGroup) !== jobFilter.group) return false;
     if(jobFilter.q){
       const q = jobFilter.q.toLowerCase();
@@ -2257,6 +2418,10 @@ function renderJobs(){
       <select class="inp" onchange="jobFilter.feeder=this.value;renderJobs()">
         <option value="">ทุกฟีดเดอร์</option>
         ${feeders.map(f=>`<option ${jobFilter.feeder===f?'selected':''}>${esc(f)}</option>`).join('')}
+      </select>
+      <select class="inp" onchange="jobFilter.contractor=this.value;renderJobs()">
+        <option value="">ทุกผู้รับจ้าง</option>
+        ${contractorList(s.jobs).map(c=>`<option ${jobFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
       </select>
       <select class="inp" onchange="jobFilter.group=this.value;renderJobs()">
         <option value="">ทุกกลุ่มแผนงาน</option>
@@ -4559,7 +4724,7 @@ ${(before.length || after.length) ? `
    รายงานรวมหลายใบงานในงวดเดียว
    เลือกได้สองทาง  ตามกลุ่มเดือนในแผน  หรือ  ติ๊กเองทีละใบ
    ============================================================ */
-let BAT = { no: 1, mode: 'group', group: '', picked: {}, data: null, busy: false };
+let BAT = { no: 1, mode: 'group', group: '', contractor: '', picked: {}, data: null, busy: false };
 
 function openPayBatch(){
   const d = S.data;
@@ -4586,7 +4751,7 @@ function batGroups(){
 }
 
 function batJobList(){
-  return (S.data.jobs||[]).filter(j => String(j.JobType||'') === 'รายปี')
+  return (S.data.jobs||[]).filter(j => String(j.JobType||'') === 'รายปี' && sameContractor(j, BAT.contractor))
     .sort((a,b) => String(a.MJMNo||'').localeCompare(String(b.MJMNo||'')));
 }
 
@@ -4637,10 +4802,18 @@ function batRender(){
         </select>
         <div class="sub" style="margin-top:8px">เลือกกลุ่มแล้วระบบติ๊กใบงานในกลุ่มให้ทั้งหมด
           สลับไปโหมดติ๊กเองเพื่อตัดบางใบออกได้</div>` : `
+        <select class="inp" style="width:100%;margin-top:10px;height:42px"
+          onchange="BAT.contractor=this.value;batRender()">
+          <option value="">ทุกผู้รับจ้าง</option>
+          ${contractorList((S.data.jobs||[]).filter(j=>String(j.JobType||'')==='รายปี'))
+            .map(c=>`<option ${BAT.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+        </select>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(true)">เลือกทั้งหมด</button>
           <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(false)">ล้างทั้งหมด</button>
-        </div>`}
+        </div>
+        ${BAT.contractor ? `<div class="sub" style="margin-top:8px">แสดงเฉพาะใบงานของ ${esc(BAT.contractor)}
+          ${batJobList().length} ใบ · ใบที่ติ๊กไว้ก่อนหน้ายังนับอยู่</div>` : ''}`}
     </div>
 
     ${BAT.mode==='pick' ? `
