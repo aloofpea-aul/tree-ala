@@ -489,7 +489,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14f';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14g';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -633,19 +633,51 @@ function netBar(on){
   b.classList.toggle('on', NET > 0);
 }
 
+/* ============ คุยกับหลังบ้าน ============
+   มีตัวจับเวลา ครบแล้วยังไม่ตอบถือว่าไม่สำเร็จ ไม่ปล่อยให้หมุนค้างตลอดไป
+   คำสั่งที่แค่อ่านข้อมูล ถ้าพลาดจะลองใหม่ให้เองหนึ่งครั้ง
+   คำสั่งที่บันทึกข้อมูลจะไม่ลองซ้ำ กันบันทึกซ้ำสองรอบ */
+const API_TIMEOUT = 20000;
+const READ_ACTIONS = ['bootstrap','version','sldPoints'];
+const READ_FNS = ['patrolList','patrolSummary','patrolNear','committeeGet','payReport','payGroups','payDocNo'];
+
+function apiMayRetry(action, payload){
+  if(action === 'tree2') return READ_FNS.indexOf(String(payload.fn||'')) >= 0;
+  return READ_ACTIONS.indexOf(action) >= 0;
+}
+
+function apiOnce(body, ms){
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
+  return fetch(API_URL, {
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(body), signal: ac.signal
+  }).then(res => res.json()).finally(() => clearTimeout(timer));
+}
+
+function apiNetMsg(e){
+  const s = String((e && (e.name || e.message)) || '');
+  if(/abort/i.test(s)) return 'เครือข่ายไม่ตอบภายใน 20 วินาที — ลองใหม่อีกครั้งได้เลย';
+  if(!navigator.onLine) return 'ตอนนี้ไม่มีสัญญาณอินเทอร์เน็ต';
+  return 'ติดต่อเซิร์ฟเวอร์ไม่ได้ — ลองใหม่อีกครั้งได้เลย';
+}
+
 async function api(action, payload={}){
   const body = Object.assign({action, user:S.user?S.user.name:'', token:S.token}, payload);
   netBar(true);
   let out;
   try{
-    const res = await fetch(API_URL, {
-      method:'POST', redirect:'follow',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(body)
-    });
-    out = await res.json();
+    try{
+      out = await apiOnce(body, API_TIMEOUT);
+    }catch(e1){
+      if(!apiMayRetry(action, payload)) throw new Error(apiNetMsg(e1));
+      await new Promise(r => setTimeout(r, 800));
+      try{ out = await apiOnce(body, API_TIMEOUT); }
+      catch(e2){ throw new Error(apiNetMsg(e2)); }
+    }
   } finally { netBar(false); }
-  if(!out.ok) throw new Error(out.error || 'เกิดข้อผิดพลาด');
+  if(!out || !out.ok) throw new Error((out && out.error) || 'เกิดข้อผิดพลาด');
   if(WRITE_ACTIONS.indexOf(action) >= 0) markDirty();
   return out;
 }
@@ -706,6 +738,7 @@ const WRITE_ACTIONS = ['saveRound','saveJob','savePayment','saveLine','saveLineF
 let dirtyTimer = null;
 function markDirty(){
   S.stamp = '';
+  try{ plCacheClear(); }catch(e){}   // ข้อมูลเปลี่ยนแล้ว ของที่จำไว้ในเครื่องใช้ไม่ได้
   clearTimeout(dirtyTimer);
   dirtyTimer = setTimeout(()=>{
     if(!S.data) return;
@@ -3589,7 +3622,7 @@ async function patrolSubmit(){
 /* ============================================================
    ระบบจัดการพาโทรล — รายการ รายละเอียด และการสั่งงานต่อ
    ============================================================ */
-let PL = { filter: 'waiting', rows: [], sum: null, busy: false, item: null, edit: null };
+let PL = { filter: 'waiting', rows: [], sum: null, busy: false, item: null, edit: null, near: {} };
 
 const PL_FILTERS = [
   ['waiting', 'รอจัดการ'],
@@ -3606,6 +3639,10 @@ const PL_REASONS = ['ตัดแล้ว', 'ไม่ใช่ต้นไม�
 /* ---------- ป้ายตัวเลขบนปุ่มกล้อง ---------- */
 async function patrolBadgeRefresh(){
   if(!S.user || !S.token) return;
+  if(!PL.sum){                                   // มีตัวเลขเก่าอยู่ ขึ้นป้ายให้ก่อนเลย
+    const warm = lsGet(plKey('waiting'));
+    if(warm && warm.sum){ PL.sum = warm.sum; patrolBadgePaint(); }
+  }
   try{
     const out = await tree2('patrolSummary', {});
     PL.sum = out;
@@ -3643,20 +3680,58 @@ async function openPatrolList(filter){
   await patrolLoad();
 }
 
+/* ---------- จำรายการไว้ในเครื่อง เปิดซ้ำเห็นทันที ---------- */
+function plKey(f){ return 'pl_' + S.year + '_' + (f || PL.filter || 'all'); }
+function plCacheSave(f, list){
+  lsSet(plKey(f), {rows: list.rows || [], total: list.total, sum: list.sum || null, at: Date.now()});
+}
+function plCacheClear(){
+  try{
+    for(let i = localStorage.length - 1; i >= 0; i--){
+      const k = localStorage.key(i);
+      if(k && (k.indexOf(LS + '_pl_') === 0 || k.indexOf(LS + '_near_') === 0)) localStorage.removeItem(k);
+    }
+  }catch(e){}
+  PL.near = {};
+}
+
+/* ผลการเทียบกับแผนของจุดเดิม คำตอบไม่เปลี่ยนจนกว่าข้อมูลในชีตจะเปลี่ยน
+   จึงจำไว้ตามเลขรุ่นข้อมูล เปิดเรื่องเดิมซ้ำจะขึ้นทันทีโดยไม่ต้องคำนวณใหม่ */
+async function patrolNearGet(id, opts){
+  const o = opts || {};
+  const key = 'near_' + id + '_' + S.year + '_' + (o.radius || 0) + '_' + (o.limit || 0);
+  const now = String(S.stamp || '');
+  const hit = PL.near[key] || lsGet(key);
+  if(hit && hit.stamp === now && now){ PL.near[key] = hit; return hit.data; }
+  const out = await tree2('patrolNear', Object.assign({patrolId: id, year: S.year}, o));
+  const rec = {stamp: now, at: Date.now(), data: out};
+  PL.near[key] = rec;
+  lsSet(key, rec);
+  return out;
+}
+
 async function patrolLoad(){
   const box = $('#plBody');
-  if(box) box.innerHTML = skChips(PL_FILTERS.length) + skList(4);
+  const warm = lsGet(plKey());
+  if(warm && warm.rows && warm.rows.length){
+    /* มีของเก่าอยู่ วาดให้ดูก่อนเลย แล้วค่อยไปถามของจริงเงียบ ๆ */
+    PL.rows = warm.rows; PL.sum = warm.sum;
+    patrolListRender(warm.total, true);
+  }else if(box){
+    box.innerHTML = skChips(PL_FILTERS.length) + skList(4);
+  }
   try{
-    const [list, sum] = await Promise.all([
-      tree2('patrolList', {filter: PL.filter, limit: 150}),
-      tree2('patrolSummary', {})
-    ]);
+    const list = await tree2('patrolList', {filter: PL.filter, limit: 150});
     PL.rows = list.rows || [];
-    PL.sum = sum;
+    if(list.sum) PL.sum = list.sum;
+    plCacheSave(PL.filter, list);
     patrolBadgePaint();
     patrolListRender(list.total);
   }catch(e){
-    if($('#plBody')) $('#plBody').innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div></div>`;
+    if(PL.rows && PL.rows.length){ toast(e.message); return; }   // ยังมีของเก่าให้ดู ไม่ต้องล้างจอ
+    if($('#plBody')) $('#plBody').innerHTML = `<div class="card">
+      <div class="sub" style="margin-bottom:10px">${esc(e.message)}</div>
+      <button class="btn" style="width:100%" onclick="patrolLoad()">ลองใหม่อีกครั้ง</button></div>`;
   }
 }
 
@@ -3908,18 +3983,20 @@ async function patrolPullNow(){
     if(out.off) toast('สะพานรับเรื่องจาก Patrol ปิดอยู่');
     else if(out.added) toast('รับเรื่องใหม่เข้ามา ' + out.added + ' เรื่อง');
     else toast('ไม่มีเรื่องต้นไม้ใหม่จาก Patrol');
+    plCacheClear();
     await patrolLoad();
-    patrolBadgeRefresh();
   }catch(e){
     toast(e.message || 'ดึงไม่สำเร็จ');
     btnBusy('#plPullBtn', false);
   }
 }
 
-function patrolListRender(total){
+function patrolListRender(total, stale){
   const box = $('#plBody');
   if(!box) return;
   box.innerHTML = `
+    ${stale ? `<div class="sub" style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+      <span class="spin dark" style="width:13px;height:13px"></span>กำลังตรวจข้อมูลใหม่…</div>` : ''}
     <div class="plchips">
       ${PL_FILTERS.map(([k,label]) => `<button type="button" class="plchip ${PL.filter===k?'on':''}"
         onclick="PL.filter='${k}';patrolLoad()">${esc(label)}${plCount(k)?' '+plCount(k):''}</button>`).join('')}
@@ -4042,7 +4119,7 @@ function photoThumbBig(r){
 async function patrolLoadPlan(id){
   try{
     const r = PL.item;
-    const out = await tree2('patrolNear', {patrolId: id, year: S.year, limit: 4, radius: 400});
+    const out = await patrolNearGet(id, {limit: 4, radius: 400});
     const list = out.near || [];
     const code = String(r.LineCode||'').replace(/\s+/g,'').toUpperCase();
     const m = list.find(x => String(x.lineCode||'').replace(/\s+/g,'').toUpperCase() === code) || list[0];
@@ -4065,7 +4142,7 @@ async function patrolLoadPlan(id){
 
 async function patrolLoadNear(id){
   try{
-    const out = await tree2('patrolNear', {patrolId: id, year: S.year, limit: 3});
+    const out = await patrolNearGet(id, {limit: 3});
     const near = out.near || [];
     const html = `
       <div class="card" style="border-left:4px solid var(--warn)">
