@@ -224,6 +224,34 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   align-items:flex-start;cursor:pointer}
 .plrow:first-child{border-top:0}
 .plth{width:54px;height:54px;border-radius:9px;object-fit:cover;flex-shrink:0}
+/* --- หน้าแรกแบบใหม่ --- */
+.hero{background:#fff;border-radius:16px;padding:16px;margin-bottom:12px;
+  box-shadow:0 5px 18px rgba(74,29,98,.13)}
+.hero .t{font-size:12.5px;color:var(--muted)}
+.hero .num{font-family:'Kanit';font-size:40px;font-weight:600;line-height:1.1}
+.hero .u{font-size:14px;font-weight:600}
+.tilerow{display:grid;gap:10px;margin-bottom:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.tile{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);
+  border-radius:14px;padding:12px 13px;position:relative;overflow:hidden;width:100%;
+  text-align:left;font:inherit;color:inherit;cursor:pointer;min-height:66px}
+.tile:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pea2)}
+.tile.w:before{background:var(--warn)} .tile.k:before{background:var(--ok)} .tile.b:before{background:var(--bad)}
+.tile .ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;background:var(--pea-soft);color:var(--pea)}
+.tile.w .ico{background:var(--warn-soft);color:#7A5A10}
+.tile.k .ico{background:var(--ok-soft);color:#245F42}
+.tile.b .ico{background:var(--bad-soft);color:#8A2E20}
+.tile .n{font-family:'Kanit';font-size:20px;font-weight:600;line-height:1.15}
+.tile .l{font-size:12.5px;color:var(--muted)}
+.tile .chev{margin-left:auto;color:#BBB6AC;flex-shrink:0}
+.navgap{flex:1}
+.navdot{position:absolute;top:-1px;left:56%;min-width:20px;height:20px;border-radius:999px;
+  background:#B4402E;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;padding:0 5px;border:2px solid #fff;box-sizing:border-box}
+.only-m{display:none !important}
+@keyframes viewin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.viewin{animation:viewin .2s ease-out}
+
 .fabdot{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;border-radius:999px;
   background:#B4402E;color:#fff;font-size:11.5px;font-weight:700;display:flex;
   align-items:center;justify-content:center;padding:0 6px;border:2px solid #fff}
@@ -246,6 +274,10 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   border:none;cursor:pointer;background:var(--pea);color:#fff;box-shadow:0 6px 18px rgba(74,29,98,.38);
   display:flex;align-items:center;justify-content:center}
 .fab:active{transform:scale(.95)}
+.fab.center{left:50%;right:auto;transform:translateX(-50%);
+  background:linear-gradient(145deg,var(--pea2),var(--pea));border:3px solid #fff;
+  box-shadow:0 6px 16px rgba(74,29,98,.45)}
+.fab.center:active{transform:translateX(-50%) scale(.95)}
 .fab span{position:absolute;bottom:-16px;font-size:10px;color:var(--pea);font-weight:600;white-space:nowrap}
 @media (max-width:760px){ .fab{bottom:74px;right:14px;width:52px;height:52px} }
 @media print{ .fab{display:none} }
@@ -279,7 +311,9 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
        -webkit-overflow-scrolling:touch;padding:14px 14px 18px}
   .bottomnav{display:flex;flex-shrink:0;background:#fff;border-top:1px solid var(--line);
               padding:8px 8px var(--navpad, calc(8px + env(safe-area-inset-bottom)))}
-  .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;cursor:pointer}
+  .bottomnav button{flex:1;border:0;background:transparent;padding:6px 0;color:#8A867E;font-size:11px;
+    cursor:pointer;position:relative;min-height:46px}
+  .only-m{display:flex !important}
   .bottomnav button.on{color:var(--pea);font-weight:600}
   .bottomnav svg{display:block;margin:0 auto 3px}
   /* แผนที่สูงเท่าที่เหลือพอดี ไม่ต้องคำนวณจากความสูงจอ */
@@ -378,6 +412,12 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
     </div>
     <div class="tb-right">
       <div class="chipyear" id="yearSwitch"></div>
+      <button class="iconbtn only-m" onclick="go('find')" aria-label="ค้นหา" title="ค้นหา">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
+      <button class="iconbtn only-m" onclick="go('map')" aria-label="แผนที่" title="แผนที่">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2Z"/><path d="M9 5v12"/><path d="M15 7v12"/></svg>
+      </button>
       <button class="iconbtn" id="btnReload" onclick="reloadAll()" aria-label="โหลดข้อมูลใหม่ทั้งหมด" title="โหลดข้อมูลใหม่ทั้งหมด">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><path d="M21 4v5h-5"/></svg>
       </button>
@@ -412,11 +452,10 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   </main>
 
   <div class="bottomnav" id="bnav">
-    <button data-v="dash" class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/></svg>สรุป</button>
-    <button data-v="find"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>ค้นหา</button>
+    <button data-v="dash" class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg>หน้าแรก</button>
+    <button data-v="jobs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>ใบงาน</button>
+    <span class="navgap" aria-hidden="true"></span>
     <button data-v="check"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5 11 13.5 15.5 9"/><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6Z"/></svg>ตรวจสอบ</button>
-    <button data-v="map"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5 3 7v12l6-2 6 2 6-2V5l-6 2Z"/><path d="M9 5v12"/><path d="M15 7v12"/></svg>แผนที่</button>
-    <button data-v="jobs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>ใบงาน</button>
     <button data-v="pay"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>งวดเงิน</button>
   </div>
 </div>
@@ -441,7 +480,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14c';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14d';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -918,6 +957,9 @@ function render(){
   document.querySelectorAll('#tabs button, #bnav button').forEach(b =>
     b.classList.toggle('on', b.dataset.v === S.view));
   ['dash','find','check','map','jobs','pay'].forEach(v => $('#v-'+v).classList.toggle('hide', v !== S.view));
+  const vw = $('#v-'+S.view);
+  if(vw && S.view !== 'map'){ vw.classList.remove('viewin'); void vw.offsetWidth; vw.classList.add('viewin'); }
+  fabPlace();
   if(S.view==='dash') renderDash();
   if(S.view==='find') renderFind();
   if(S.view==='check') renderCheck();
@@ -930,6 +972,24 @@ document.addEventListener('click', e => {
   const b = e.target.closest('#tabs button, #bnav button');
   if(b){ S.view = b.dataset.v; render(); }
 });
+
+/* เปลี่ยนแท็บจากปุ่มที่ไหนก็ได้ */
+function go(v){
+  if(!v) return;
+  S.view = v;
+  render();
+  const m = document.querySelector('main');
+  if(m) m.scrollTop = 0;
+  window.scrollTo(0, 0);
+}
+
+/* บนมือถือ ปุ่มกล้องไปอยู่ตรงกลางเหนือแถบเมนู บนจอกว้างอยู่มุมขวาล่างเหมือนเดิม */
+function fabPlace(){
+  const f = document.querySelector('.fab');
+  if(!f) return;
+  f.classList.toggle('center', window.innerWidth <= 760);
+}
+window.addEventListener('resize', fabPlace);
 
 /* ============================================================
    ข้อ 2 — ระบบตรวจสอบต้นไม้ (คล้ายงานพาโทรล แต่เฉพาะต้นไม้)
@@ -1816,13 +1876,82 @@ function findOnMap(code){
 }
 
 /* ---------- แดชบอร์ด ---------- */
+/* การ์ดใบแรกของหน้าแรก ตอบคำถามเดียวว่า ตอนนี้ต้องทำอะไร */
+function dashHero(s){
+  const sum = PL.sum || {};
+  const urgent = num(sum.urgent), waiting = num(sum.waiting);
+  const r3 = s.roundStat[2];
+  const open = (S.data.findings || []).filter(f => String(f.Status||'') === 'รอปรับปรุง').length;
+  const hour = new Date().getHours();
+  const hi = hour < 12 ? 'สวัสดีตอนเช้า' : (hour < 17 ? 'สวัสดีตอนบ่าย' : 'สวัสดีตอนเย็น');
+  const me = (S.user && S.user.name) || '';
+
+  const chev = '<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+
+  const hero = urgent
+    ? `<div class="t">ต้องจัดการวันนี้</div>
+       <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+         <span class="num kanit" style="color:var(--bad)">${urgent}</span>
+         <span class="u">เรื่องเร่งด่วน</span>
+       </div>
+       <div class="sub" style="margin-top:3px">ต้นไม้ใกล้สาย เสี่ยงไฟดับได้ทุกเมื่อ</div>`
+    : (waiting
+      ? `<div class="t">ต้องจัดการวันนี้</div>
+         <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+           <span class="num kanit" style="color:var(--warn)">${waiting}</span>
+           <span class="u">เรื่องรอจัดการ</span>
+         </div>
+         <div class="sub" style="margin-top:3px">ยังไม่มีเรื่องเร่งด่วนค้างอยู่</div>`
+      : `<div class="t">ต้องจัดการวันนี้</div>
+         <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+           <span class="num kanit" style="color:var(--ok)">0</span>
+           <span class="u">เรื่องค้าง</span>
+         </div>
+         <div class="sub" style="margin-top:3px">คิวพาโทรลโล่งแล้ว ตรวจรอบถัดไปได้เลย</div>`);
+
+  return `
+  <div class="hero">
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">
+      <div style="flex:1;min-width:0">
+        <div class="sub" style="font-size:12px">${esc(hi)}</div>
+        <div class="kanit" style="font-size:18px;font-weight:600">${esc(me)}</div>
+      </div>
+    </div>
+    ${hero}
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn" style="flex:1;height:46px" onclick="openPatrolList('${urgent?'urgent':'waiting'}')">เปิดดูทั้งหมด</button>
+      <button class="btn ghost" style="flex:1;height:46px" onclick="openPatrol()">ถ่ายแจ้งเรื่องใหม่</button>
+    </div>
+  </div>
+
+  <div class="tilerow">
+    <button type="button" class="tile w" onclick="go('check')">
+      <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <span><span class="n">${r3.wait}</span><span class="l">ไลน์รอตรวจรับ รอบที่ 3</span></span>
+      ${chev}
+    </button>
+    <button type="button" class="tile ${open ? 'b' : 'k'}" onclick="go('check')">
+      <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V12"/><path d="M12 13c0-4 3-8 7-9 .5 5-2 9-7 9z"/><path d="M12 17c0-3.5-2.5-6.5-6-7 0 4 2 7 6 7z"/></svg></span>
+      <span><span class="n">${open}</span><span class="l">จุดที่พบรอปรับปรุง</span></span>
+      ${chev}
+    </button>
+    <button type="button" class="tile k" onclick="go('pay')">
+      <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+      <span><span class="n">${r3.done}<span style="font-size:14px;color:var(--muted)">/${r3.total}</span></span><span class="l">ตรวจรับครบ พร้อมออกรายงาน</span></span>
+      ${chev}
+    </button>
+  </div>`;
+}
+
 function renderDash(){
   const s = summarize();
+  if(!PL.sum) patrolBadgeRefresh().then(() => { if(S.view === 'dash') renderDash(); });
   const maxKm = Math.max(1, ...Object.values(s.byFeeder).map(x=>x.km));
   const feeders = Object.entries(s.byFeeder).sort((a,b)=>b[1].km-a[1].km);
   const r3 = s.roundStat[2];
 
   $('#v-dash').innerHTML = `
+  ${dashHero(s)}
   <div class="grid kpigrid" style="grid-template-columns:repeat(auto-fit,minmax(215px,1fr));margin-bottom:16px">
     <div class="card kpi"><div class="lbl">ใบงานทั้งปี ${esc(S.year)}</div><div class="n">${s.jobs.length}</div>
       <div class="sub">รายปี ${s.annual.length} · เฉพาะคราว ${s.lv.length}</div></div>
@@ -3438,10 +3567,22 @@ function patrolBadgePaint(){
   if(!fab) return;
   let b = fab.querySelector('.fabdot');
   const n = PL.sum ? num(PL.sum.waiting) : 0;
-  if(!n){ if(b) b.remove(); return; }
+  if(!n){ if(b) b.remove(); navDotPaint(0); return; }
   if(!b){ b = el('<span class="fabdot"></span>'); fab.appendChild(b); }
   b.textContent = n > 99 ? '99+' : n;
   b.style.background = (PL.sum && num(PL.sum.urgent)) ? '#B4402E' : '#C98A16';
+  navDotPaint(n, b.style.background);
+}
+
+/* ป้ายตัวเลขบนเมนู ตรวจสอบ ของแถบล่าง เห็นงานค้างโดยไม่ต้องเข้าไปดู */
+function navDotPaint(n, color){
+  const btn = document.querySelector('#bnav button[data-v="check"]');
+  if(!btn) return;
+  let d = btn.querySelector('.navdot');
+  if(!n){ if(d) d.remove(); return; }
+  if(!d){ d = el('<span class="navdot"></span>'); btn.appendChild(d); }
+  d.textContent = n > 99 ? '99+' : n;
+  d.style.background = color || '#B4402E';
 }
 
 /* ---------- รายการ ---------- */
