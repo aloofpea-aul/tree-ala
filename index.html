@@ -279,7 +279,16 @@ html.diag #diagbox .note{font-size:12.5px;color:#C9C6C0;line-height:1.7;margin-t
   box-shadow:0 6px 16px rgba(74,29,98,.45)}
 .fab.center:active{transform:translateX(-50%) scale(.95)}
 .fab span{position:absolute;bottom:-16px;font-size:10px;color:var(--pea);font-weight:600;white-space:nowrap}
-@media (max-width:760px){ .fab{bottom:74px;right:14px;width:52px;height:52px} }
+/* ปุ่มกล้องนั่งคร่อมแถบเมนูล่าง นูนขึ้นมาราว 18 จุด ที่เหลือซ้อนบนแถบ
+   ความสูงแถบเมนูจริง = 62 + --navpad (วัดแล้วที่กว้าง 390 ได้ 70 เมื่อ navpad 8)
+   เหลือระยะจากขอบจอ = ความสูงแถบ ลบ (52 - 18) = 28 + --navpad */
+@media (max-width:760px){
+  .fab{right:14px;width:52px;height:52px;
+       bottom:calc(28px + var(--navpad, calc(8px + env(safe-area-inset-bottom))))}
+}
+/* เปิดแผ่นข้อมูลอยู่ ซ่อนปุ่มกล้องไว้ก่อน ไม่ให้ลอยค้างกลางจอ */
+.fab{transition:opacity .15s ease, visibility .15s ease}
+body.sheeton .fab{opacity:0;visibility:hidden;pointer-events:none}
 @media print{ .fab{display:none} }
 @media (max-width:760px){
   /* โครงแบบแอป — ตรึงเต็มจอที่มองเห็นจริง ให้เลื่อนเฉพาะเนื้อหาข้างใน
@@ -480,7 +489,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14e';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14f';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -990,6 +999,16 @@ function fabPlace(){
   f.classList.toggle('center', window.innerWidth <= 760);
 }
 window.addEventListener('resize', fabPlace);
+
+/* เฝ้าดูว่ามีแผ่นข้อมูลเปิดอยู่หรือไม่ ถ้ามีให้ซ่อนปุ่มกล้อง
+   ใช้วิธีเฝ้าดูกล่อง #modal เพราะมีหลายที่ในโค้ดที่เปิดแผ่นเอง ไม่ได้ผ่าน openSheet ทุกอัน */
+(function watchSheet(){
+  const m = document.getElementById('modal');
+  if(!m) return;
+  const sync = () => document.body.classList.toggle('sheeton', m.childElementCount > 0);
+  new MutationObserver(sync).observe(m, {childList:true});
+  sync();
+})();
 
 /* ============================================================
    ข้อ 2 — ระบบตรวจสอบต้นไม้ (คล้ายงานพาโทรล แต่เฉพาะต้นไม้)
