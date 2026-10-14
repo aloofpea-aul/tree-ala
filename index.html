@@ -497,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14h';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-14i';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -1118,7 +1118,7 @@ function checkView(){
   const fr = list => list.filter(r => sameContractor(r.job, c));
   return {
     jobById,
-    cons: contractorList(q.rows.map(r => r.job)),
+    cons: conListOf(q.rows.map(r => r.job)),
     overdue: fr(q.overdue), soon: fr(q.soon), later: fr(q.later),
     risk: q.risk.filter(f => sameContractor(jobById[f.JobID], c))
   };
@@ -2381,8 +2381,9 @@ function todoList(s){
 /* ---------- รายการใบงาน ---------- */
 let jobFilter = {q:'', sys:'', feeder:'', group:'', contractor:''};
 
-/* รายชื่อผู้รับจ้างที่มีจริงในแผนปีนี้ ใช้ร่วมกันทุกที่ที่มีรายการใบงาน */
-function contractorList(jobs){
+/* รายชื่อผู้รับจ้างจากชุดใบงานที่ส่งเข้ามา ใช้ร่วมกันทุกที่ที่มีรายการใบงาน
+   คนละตัวกับ contractorList() ของหน้าแผนที่ ซึ่งไล่ทั้งปีและใช้ลำดับเดิมในการแจกสี */
+function conListOf(jobs){
   return [...new Set((jobs||[]).map(j => String(j.Contractor||'').trim()).filter(Boolean))]
     .sort((a,b) => a.localeCompare(b,'th'));
 }
@@ -2421,7 +2422,7 @@ function renderJobs(){
       </select>
       <select class="inp" onchange="jobFilter.contractor=this.value;renderJobs()">
         <option value="">ทุกผู้รับจ้าง</option>
-        ${contractorList(s.jobs).map(c=>`<option ${jobFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+        ${conListOf(s.jobs).map(c=>`<option ${jobFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
       </select>
       <select class="inp" onchange="jobFilter.group=this.value;renderJobs()">
         <option value="">ทุกกลุ่มแผนงาน</option>
@@ -2477,11 +2478,14 @@ function exportCsv(){
 }
 
 /* ---------- งวดเงิน ---------- */
+let payFilter = { contractor: '' };
+
 function renderPay(){
   const s = summarize();
   const jmap = {}; s.jobs.forEach(j => jmap[j.JobID] = j);
-  const rows = S.data.payments.slice().sort((a,b) =>
+  const all = S.data.payments.slice().sort((a,b) =>
     String(a.JobID).localeCompare(String(b.JobID)) || num(a.Installment)-num(b.Installment));
+  const rows = all.filter(r => sameContractor(jmap[r.JobID], payFilter.contractor));
   const paid = rows.filter(r => String(r.Status).indexOf('เบิกจ่ายแล้ว')>=0)
                    .reduce((a,r)=>a+num(r.Amount),0);
   const total = rows.reduce((a,r)=>a+num(r.Amount),0);
@@ -2499,6 +2503,13 @@ function renderPay(){
         <div class="sub">เลือกตามกลุ่มเดือนในแผน หรือติ๊กเอง รวมเป็นเอกสารชุดเดียว เลขหนังสือเลขเดียว</div>
       </div>
       <button class="btn" style="height:42px;padding:0 18px" onclick="openPayBatch()">เลือกใบงาน</button>
+    </div>
+    <div class="toolbar">
+      <select class="inp" style="flex:1;min-width:200px" onchange="payFilter.contractor=this.value;renderPay()">
+        <option value="">ทุกผู้รับจ้าง</option>
+        ${conListOf(s.jobs).map(c=>`<option ${payFilter.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
+      <div class="sub">แสดง ${rows.length} จาก ${all.length} งวด · ${fmt0(rows.reduce((a,r)=>a+num(r.Amount),0))} บาท</div>
     </div>
     <div class="card" style="padding:0;overflow:auto">
       <table class="resp">
@@ -2922,10 +2933,19 @@ function jobPasses(j){
   if(mapFilter.group && String(j.MonthGroup) !== mapFilter.group) return false;
   if(mapFilter.sys && j.System !== mapFilter.sys) return false;
   if(mapFilter.month){
-    const m = String(j.PlanMonths||'');
-    if(m.indexOf(mapFilter.month) < 0) return false;
+    /* ช่องเลือกเป็นชื่อเดือนเต็ม เช่น มกราคม แต่ในชีตเก็บแบบย่อ เช่น ม.ค./พ.ค./ก.ย.
+       เทียบตรง ๆ จึงไม่เคยตรงเลย ทำให้เส้นหายหมดทั้งแผนที่ ต้องเทียบด้วยเลขเดือนแทน */
+    const want = MONTH_NO[mapFilter.month] || 0;
+    if(!want) return false;
+    if(planMonthNums(j).indexOf(want) < 0) return false;
   }
   return true;
+}
+
+/* เดือนตามแผนของใบงาน คืนเป็นเลขเดือน รับได้ทั้งชื่อเต็มและชื่อย่อ */
+function planMonthNums(j){
+  return String((j||{}).PlanMonths||'').split('/')
+    .map(x => MONTH_NO[String(x).trim()] || 0).filter(Boolean);
 }
 
 function renderMapBar(sum){
@@ -2948,7 +2968,7 @@ function renderMapBar(sum){
     </select>
     <select aria-label="เดือนตามแผน" onchange="setMapFilter('month', this.value)">
       <option value="">เดือน · ทั้งปี</option>
-      ${MONTHS_TH.map(m=>`<option ${mapFilter.month===m?'selected':''}>${m}</option>`).join('')}
+      ${monthsInPlan(sum.jobs).map(m=>`<option ${mapFilter.month===m.name?'selected':''}>${m.name}</option>`).join('')}
     </select>
     <select aria-label="กลุ่มแผนงาน" onchange="setMapFilter('group', this.value)">
       <option value="">กลุ่ม · ทั้งหมด</option>
@@ -2969,6 +2989,14 @@ function renderMapBar(sum){
     </div>
     <div class="sum">ตรงเงื่อนไข ${pick.length} ใบงาน · ${fmt(pick.reduce((a,j)=>a+num(j.PlanKm),0))} กม.${lines.length?` · ${lines.length} ไลน์แยก`:''}${fixN?` · <b>แก้เอง ${fixN} เส้น</b>`:''}</div>
     ${mapFilter.detail==='feeder'?`<div class="sum" style="color:#8A6512">โหมดสีหยาบ — ทั้งฟีดเดอร์ใช้สีของใบงานไลน์เมน จึงเห็นเป็นผู้รับจ้างรายเดียว</div>`:''}`;
+}
+
+/* แสดงเฉพาะเดือนที่มีงานตามแผนจริง เลือกแล้วจะไม่เจอแผนที่ว่างเปล่า */
+function monthsInPlan(jobs){
+  const has = {};
+  (jobs||[]).forEach(j => planMonthNums(j).forEach(n => has[n] = (has[n]||0) + 1));
+  return MONTHS_TH.map((name, i) => ({name, no: i+1, n: has[i+1]||0}))
+    .filter(m => m.n > 0);
 }
 
 function setMapMode(m){ mapFilter.mode = m; renderMap(); }
@@ -4742,6 +4770,7 @@ function batGroups(){
   const g = {};
   (S.data.jobs||[]).forEach(j => {
     if(String(j.JobType||'') !== 'รายปี') return;
+    if(!sameContractor(j, BAT.contractor)) return;
     const k = String(j.PlanMonths||'').trim() || '(ยังไม่ระบุเดือน)';
     if(!g[k]) g[k] = { planMonths:k, monthGroup:j.MonthGroup||'', jobs:[] };
     g[k].jobs.push(j);
@@ -4757,7 +4786,9 @@ function batJobList(){
 
 function batApplyGroup(){
   BAT.picked = {};
-  const g = batGroups().find(x => x.planMonths === BAT.group);
+  const gs = batGroups();
+  let g = gs.find(x => x.planMonths === BAT.group);
+  if(!g && gs.length){ g = gs[0]; BAT.group = g.planMonths; }   // กลุ่มเดิมไม่มีของผู้รับจ้างรายนี้ ใช้กลุ่มแรกแทน
   if(g) g.jobs.forEach(j => BAT.picked[j.JobID] = true);
 }
 
@@ -4786,6 +4817,16 @@ function batRender(){
             onclick="BAT.no=${n};batRender()">งวดที่ ${n}</button>`).join('')}
       </div>
 
+      <div class="plabel" style="margin-top:14px">ผู้รับจ้าง</div>
+      <select class="inp" style="width:100%;height:42px"
+        onchange="BAT.contractor=this.value;BAT.picked={};if(BAT.mode==='group')batApplyGroup();batRender()">
+        <option value="">ทุกผู้รับจ้าง</option>
+        ${conListOf((S.data.jobs||[]).filter(j=>String(j.JobType||'')==='รายปี'))
+          .map(c=>`<option ${BAT.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
+      ${BAT.contractor ? `<div class="sub" style="margin-top:7px">เลือกเฉพาะใบงานของ ${esc(BAT.contractor)}
+        ${jobs.length} ใบ · เปลี่ยนผู้รับจ้างแล้วระบบล้างที่ติ๊กไว้ให้ใหม่</div>` : ''}
+
       <div class="plabel" style="margin-top:14px">เลือกใบงานจาก</div>
       <div style="display:flex;gap:8px">
         <button class="btn ${BAT.mode==='group'?'':'ghost'}" style="flex:1;height:40px"
@@ -4802,18 +4843,10 @@ function batRender(){
         </select>
         <div class="sub" style="margin-top:8px">เลือกกลุ่มแล้วระบบติ๊กใบงานในกลุ่มให้ทั้งหมด
           สลับไปโหมดติ๊กเองเพื่อตัดบางใบออกได้</div>` : `
-        <select class="inp" style="width:100%;margin-top:10px;height:42px"
-          onchange="BAT.contractor=this.value;batRender()">
-          <option value="">ทุกผู้รับจ้าง</option>
-          ${contractorList((S.data.jobs||[]).filter(j=>String(j.JobType||'')==='รายปี'))
-            .map(c=>`<option ${BAT.contractor===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}
-        </select>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(true)">เลือกทั้งหมด</button>
           <button class="btn ghost" style="flex:1;height:36px" onclick="batAll(false)">ล้างทั้งหมด</button>
-        </div>
-        ${BAT.contractor ? `<div class="sub" style="margin-top:8px">แสดงเฉพาะใบงานของ ${esc(BAT.contractor)}
-          ${batJobList().length} ใบ · ใบที่ติ๊กไว้ก่อนหน้ายังนับอยู่</div>` : ''}`}
+        </div>`}
     </div>
 
     ${BAT.mode==='pick' ? `
