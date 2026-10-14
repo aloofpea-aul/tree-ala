@@ -251,6 +251,45 @@ function plkOnClose_(cur, why, byName) {
   });
 }
 
+/** งานตัดต้นไม้ลบเรื่องนี้ลงถังขยะ — บอกฝั่ง Patrol ตามเหตุผลที่เลือก */
+function plkOnDelete_(cur, why, byName) {
+  var srcId = String(cur.SrcID || '').trim();
+  if (!srcId) return;
+  var w = String(why || '').trim();
+  var now = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+
+  if (w === 'ตัดไปแล้ว') {
+    plkWriteBack_(srcId, {
+      Status: 'แก้ไขเสร็จ',
+      FixedDate: Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'),
+      FixedBy: byName || '',
+      FixedDetail: 'ตัดแล้วโดยงานตัดต้นไม้'
+    });
+    return;
+  }
+  if (w === 'ไม่ใช่งานตัดต้นไม้' || w === 'แจ้งผิดจุด') {
+    /* คืนให้ฝั่ง Patrol จัดการเอง ไม่ค้างอยู่ในคิวของงานตัดต้นไม้ */
+    plkWriteBack_(srcId, { Status: 'ใหม่' });
+    return;
+  }
+  plkWriteBack_(srcId, {
+    Status: 'ปิด (ไม่ใช่ปัญหา)',
+    ClosedAt: now,
+    ClosedBy: byName || '',
+    CloseReason: 'งานตัดต้นไม้: ' + w
+  });
+}
+
+/** กู้คืนจากถังขยะ — กลับไปบอกว่ารับเรื่องแล้วตามเดิม */
+function plkOnRestore_(cur) {
+  var srcId = String(cur.SrcID || '').trim();
+  if (!srcId) return;
+  plkWriteBack_(srcId, {
+    Status: 'รับเรื่องแล้ว',
+    ClosedAt: '', ClosedBy: '', CloseReason: ''
+  });
+}
+
 /* ====================== ติดตั้ง ====================== */
 
 function setupPatrolLink() {
