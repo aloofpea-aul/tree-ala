@@ -65,7 +65,135 @@ function distM_(lat1, lng1, lat2, lng2) {
 /** รัศมีที่ถือว่า "ตรงกับแผน" ตั้งได้ในแท็บ Config คีย์ PATROL_RADIUS_M */
 function patrolRadius_() {
   var v = parseFloat(getConfig_().PATROL_RADIUS_M);
-  return isFinite(v) && v > 0 ? v : 100;
+  return isFinite(v) && v > 0 ? v : 150;
+}
+
+/** รหัสอุปกรณ์แบบตัดช่องว่างและตัวพิมพ์ ให้เทียบกันได้ตรง ๆ */
+function normId_(v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); }
+
+/**
+ * ระยะตั้งฉากจากจุดถึง "ช่วงสาย" ระหว่างเสาสองต้น หน่วยเมตร
+ * ถ้าจุดอยู่เลยปลายช่วงสาย จะวัดถึงปลายที่ใกล้ที่สุดแทน
+ */
+function distSegM_(lat, lng, aLat, aLng, bLat, bLng) {
+  var R = 6371000, d = Math.PI / 180;
+  var cos = Math.cos(lat * d);
+  var px = (lng - aLng) * d * cos * R, py = (lat - aLat) * d * R;
+  var bx = (bLng - aLng) * d * cos * R, by = (bLat - aLat) * d * R;
+  var len2 = bx * bx + by * by;
+  var t = len2 ? (px * bx + py * by) / len2 : 0;
+  if (t < 0) t = 0; else if (t > 1) t = 1;
+  var dx = px - bx * t, dy = py - by * t;
+  return Math.round(Math.sqrt(dx * dx + dy * dy));
+}
+
+/* ====== ปฏิทินไทย ใช้คำนวณรอบตัด ====== */
+var TH_MONTH = { 'ม.ค.':1,'มกราคม':1,'ก.พ.':2,'กุมภาพันธ์':2,'มี.ค.':3,'มีนาคม':3,
+  'เม.ย.':4,'เมษายน':4,'พ.ค.':5,'พฤษภาคม':5,'มิ.ย.':6,'มิถุนายน':6,'ก.ค.':7,'กรกฎาคม':7,
+  'ส.ค.':8,'สิงหาคม':8,'ก.ย.':9,'กันยายน':9,'ต.ค.':10,'ตุลาคม':10,'พ.ย.':11,'พฤศจิกายน':11,
+  'ธ.ค.':12,'ธันวาคม':12 };
+
+function thDate_(v) {
+  if (v instanceof Date) return v;
+  var s = String(v || '').trim();
+  if (!s) return null;
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) { var y = +m[1]; if (y > 2400) y -= 543; return new Date(y, +m[2] - 1, +m[3]); }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) { var y2 = +m[3]; if (y2 > 2400) y2 -= 543; return new Date(y2, +m[2] - 1, +m[1]); }
+  var t = new Date(s);
+  return isNaN(t.getTime()) ? null : t;
+}
+function dayDiff_(a, b) { return Math.round((b - a) / 86400000); }
+
+/**
+ * ต้นทางของแผน — จุดเริ่มของแต่ละไลน์หรือแต่ละใบงานในผัง
+ * ใช้ทั้งแท็บ TreeLines (มีรหัสไลน์รายเส้น) และ TreeSegments (มีจุดเริ่มรายใบงาน)
+ * ปีไหนไม่มีข้อมูลเลย จะถอยไปใช้ทุกปีแทน จะได้ไม่ขึ้นนอกแผนทั้งหมด
+ */
+function planRoots_(year) {
+  var jobs = {};
+  readTable_(TABLES.jobs).rows.forEach(function (j) { jobs[j.JobID] = j; });
+
+  var lines = readTable_(TABLES.lines).rows;
+  var segs  = readTable_(TABLES.segments).rows;
+
+  function build(y) {
+    var roots = {};
+    lines.forEach(function (l) {
+      if (y && String(l.Year) !== String(y)) return;
+      var c = normId_(l.LineCode);
+      if (!c || roots[c]) return;
+      roots[c] = { code: l.LineCode, jobId: l.JobID, year: l.Year,
+                   placeName: l.PlaceName || '',
+                   cut: { r1: l.R1Date || '', r2: l.R2Date || '', r3: l.R3Date || '' } };
+    });
+    segs.forEach(function (sg) {
+      var j = jobs[sg.JobID] || {};
+      if (y && String(j.Year || '') !== String(y)) return;
+      var c = normId_(sg.FromDeviceID);
+      if (!c || roots[c]) return;
+      roots[c] = { code: sg.FromDeviceID, jobId: sg.JobID, year: j.Year || '',
+                   placeName: '', km: sg.Km, cut: { r1: '', r2: '', r3: '' } };
+    });
+    return roots;
+  }
+
+  var roots = build(year), used = String(year || '');
+  if (!Object.keys(roots).length) { roots = build(''); used = ''; }
+
+  var byJob = {};
+  readTable_(TABLES.rounds).rows.forEach(function (r) {
+    (byJob[r.JobID] = byJob[r.JobID] || []).push(r);
+  });
+
+  return { roots: roots, jobs: jobs, rounds: byJob, yearUsed: used };
+}
+
+/** รอบตัดของใบงาน — ตัดรอบที่แล้วเมื่อไร ผ่านมากี่วัน รอบถัดไปครบกำหนดเมื่อไร */
+function jobRoundInfo_(jobId, job, byJob) {
+  var out = { ok: false };
+  var rs = ((byJob || {})[jobId] || []).slice();
+  if (!rs.length) return out;
+  rs.sort(function (a, b) { return Number(a.RoundNo) - Number(b.RoundNo); });
+
+  var months = String(job.PlanMonths || '').split('/').map(function (x) { return x.trim(); });
+  var be = Number(job.Year) || 0;
+  var ce = be > 2400 ? be - 543 : be;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+
+  var last = null, lastNo = 0, nextNo = 0;
+  rs.forEach(function (r) {
+    var d = thDate_(r.AcceptDate);
+    var done = !!d || String(r.Status || '').indexOf('ตรวจรับแล้ว') >= 0;
+    if (done && d && (!last || d > last)) { last = d; lastNo = Number(r.RoundNo); }
+    if (!done && !nextNo) nextNo = Number(r.RoundNo);
+  });
+
+  out.ok = true;
+  out.total = rs.length;
+  out.lastNo = lastNo;
+  out.lastDate = last ? Utilities.formatDate(last, 'Asia/Bangkok', 'yyyy-MM-dd') : '';
+  out.daysSince = last ? dayDiff_(last, today) : null;
+
+  if (!nextNo) { out.doneAll = true; return out; }
+  out.nextNo = nextNo;
+
+  var mName = '';
+  rs.forEach(function (r) {
+    if (Number(r.RoundNo) === nextNo && String(r.PlanMonth || '').trim()) mName = String(r.PlanMonth).trim();
+  });
+  if (!mName) mName = months[nextNo - 1] || '';
+  out.planMonth = mName;
+
+  var mo = TH_MONTH[mName] || 0;
+  if (mo && ce) {
+    var due = new Date(ce, mo, 0);
+    out.dueDate = Utilities.formatDate(due, 'Asia/Bangkok', 'yyyy-MM-dd');
+    out.daysLeft = dayDiff_(today, due);
+    out.overdue = out.daysLeft < 0;
+  }
+  return out;
 }
 
 /** พิกัดอุปกรณ์จากระบบ SLD — ใช้แคชร่วมกับ apiSldPoints_ */
@@ -83,48 +211,70 @@ function sldPointsCached_() {
  */
 function patrolMatch_(lat, lng, year, radius) {
   radius = radius || patrolRadius_();
-  var lines = readTable_(TABLES.lines).rows;
-  if (year) lines = lines.filter(function (l) { return String(l.Year) === String(year); });
 
-  var byCode = {};
-  lines.forEach(function (l) {
-    var c = String(l.LineCode || '').replace(/\s+/g, '').toUpperCase();
-    if (c && !byCode[c]) byCode[c] = l;
-  });
+  var pr = planRoots_(year);
+  var roots = pr.roots, jobs = pr.jobs;
 
-  var jobs = {};
-  readTable_(TABLES.jobs).rows.forEach(function (j) { jobs[j.JobID] = j; });
+  var pts = sldPointsCached_();
+  var byId = {};
+  pts.forEach(function (p) { byId[normId_(p.id)] = p; });
 
-  /* เก็บแค่จุดที่ใกล้ที่สุดของแต่ละไลน์ ไม่งั้นรัศมีกว้าง ๆ จะได้เป็นหมื่นจุดจนสคริปต์ล้ม */
+  /* ไล่ย้อนตามผังขึ้นไปจนเจอจุดเริ่มของแผน จำคำตอบไว้ไม่ต้องไล่ซ้ำ */
+  var memo = {};
+  function owner(id, depth) {
+    var k = normId_(id);
+    if (!k) return null;
+    if (memo[k] !== undefined) return memo[k];
+    if (depth > 80) { memo[k] = null; return null; }
+    if (roots[k]) { memo[k] = roots[k]; return roots[k]; }
+    var p = byId[k];
+    var up = (p && p.parent) ? owner(p.parent, depth + 1) : null;
+    memo[k] = up;
+    return up;
+  }
+
+  /* หาช่วงสายที่ใกล้ที่สุดของแต่ละไลน์ในแผน */
   var best = {};
-  sldPointsCached_().forEach(function (pt) {
-    var code = String(pt.id || '').replace(/\s+/g, '').toUpperCase();
-    if (!byCode[code]) return;
-    var d = distM_(lat, lng, pt.lat, pt.lng);
+  pts.forEach(function (p) {
+    if (!isFinite(p.lat) || !isFinite(p.lng)) return;
+    var par = p.parent ? byId[normId_(p.parent)] : null;
+    var d, fromId, toId;
+    if (par && isFinite(par.lat) && isFinite(par.lng)) {
+      d = distSegM_(lat, lng, par.lat, par.lng, p.lat, p.lng);
+      fromId = par.id; toId = p.id;
+    } else {
+      d = distM_(lat, lng, p.lat, p.lng);
+      fromId = p.id; toId = '';
+    }
     if (d > radius) return;
-    if (!best[code] || d < best[code].d) best[code] = { d: d, pt: pt };
+    var r = owner(p.id, 0);
+    if (!r) return;
+    var k = normId_(r.code);
+    if (!best[k] || d < best[k].distM)
+      best[k] = { distM: d, root: r, segFrom: fromId, segTo: toId, lat: p.lat, lng: p.lng, feeder: p.feeder, desc: p.desc };
   });
 
-  var hits = [];
-  Object.keys(best).forEach(function (code) {
-    var d = best[code].d, pt = best[code].pt, line = byCode[code];
-    var job = jobs[line.JobID] || {};
-    hits.push({
-      distM: d,
-      lineCode: line.LineCode,
-      placeName: line.PlaceName || pt.desc || '',
-      lat: pt.lat, lng: pt.lng,
-      jobId: line.JobID,
+  var hits = Object.keys(best).map(function (k) {
+    var b = best[k], r = b.root, job = jobs[r.jobId] || {};
+    return {
+      distM: b.distM,
+      lineCode: r.code,
+      placeName: r.placeName || b.desc || '',
+      segFrom: b.segFrom, segTo: b.segTo,
+      lat: b.lat, lng: b.lng,
+      jobId: r.jobId,
       jobName: job.JobName || '',
       mjmNo: job.MJMNo || '',
-      feeder: job.FeederID || pt.feeder || '',
+      feeder: job.FeederID || b.feeder || '',
       system: job.System || '',
       voltLevel: job.VoltLevel || '',
       contractor: job.Contractor || '',
       planKm: job.PlanKm || '',
-      year: line.Year || job.Year || '',
-      cut: { r1: line.R1Date || '', r2: line.R2Date || '', r3: line.R3Date || '' }
-    });
+      planMonths: job.PlanMonths || '',
+      year: r.year || job.Year || '',
+      cut: r.cut || { r1: '', r2: '', r3: '' },
+      round: jobRoundInfo_(r.jobId, job, pr.rounds)
+    };
   });
   hits.sort(function (a, b) { return a.distM - b.distM; });
   return hits;
