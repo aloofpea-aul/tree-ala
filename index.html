@@ -497,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-16b';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-17a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -3175,7 +3175,9 @@ function fixSeg(segKey, feeder){
        <button onclick="closeSheet()" aria-label="ปิด">×</button>
      </div>
      <div style="padding:16px"><div class="card">
-       <div class="sub" style="margin-bottom:12px">ใช้เมื่อระบบเดาผิด ค่าที่กำหนดเองจะทับผลที่คำนวณให้ และคงอยู่ถาวร</div>
+       <div class="sub" style="margin-bottom:12px">ใช้เมื่อระบบเดาผิด ค่าที่กำหนดเองจะทับผลที่คำนวณให้ และคงอยู่ถาวร<br>
+         ช่วงสายนี้เป็นสายเส้นเดียวกันทุกปี ที่กำหนดไว้จึงใช้ร่วมกันทุกปี ระบบเทียบให้เป็นใบงานของปีนั้นเอง
+         ${cur && cur.FromJobID ? '<br>เดิมกำหนดไว้ที่ใบ ' + esc(String(cur.FromJobID).replace(/^J\d\d-/,'')) + ' ของอีกปี ระบบเทียบมาเป็นใบของปี ' + esc(S.year) + ' ให้แล้ว' : ''}</div>
        <div class="field" style="margin-bottom:14px">
          <label for="fx">ใบงานที่รับผิดชอบ</label>
          <select class="inp" id="fx" style="width:100%">
