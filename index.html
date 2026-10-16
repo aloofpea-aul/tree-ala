@@ -497,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-16a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-16b';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -1362,12 +1362,13 @@ function canOverride(){
 }
 
 /* ย่อรูปก่อนส่ง ลดเวลารอและพื้นที่เก็บ */
-function here(){
+function here(maxAge){
   return new Promise(res => {
     if(!navigator.geolocation) return res({});
     navigator.geolocation.getCurrentPosition(
       p => res({lat: p.coords.latitude.toFixed(6), lng: p.coords.longitude.toFixed(6)}),
-      () => res({}), {enableHighAccuracy:true, timeout:6000, maximumAge:30000});
+      () => res({}), {enableHighAccuracy:true, timeout:8000,
+                      maximumAge: (maxAge === undefined ? 30000 : maxAge)});
   });
 }
 
@@ -3658,8 +3659,9 @@ async function openPatrol(){
 async function patrolLocate(){
   const box = $('#ptBody');
   if(!box) return;
-  box.innerHTML = `<div class="card"><div class="sub">กำลังขอตำแหน่งที่ตั้งจากเครื่อง…</div></div>`;
-  const pos = await here();
+  PT.matches = [];
+  patrolRender(150, true);         // ฟอร์มขึ้นทันที กล้องกดได้เลย ไม่ต้องรอ GPS
+  const pos = await here(120000);  // ถ้าเพิ่งได้พิกัดมาไม่เกินสองนาที ใช้ของเดิมได้ ไม่ต้องจับใหม่
   if(!pos.lat){
     box.innerHTML = `<div class="card">
       <div style="font-weight:600;margin-bottom:6px">ยังไม่ได้ตำแหน่งที่ตั้ง</div>
@@ -3669,8 +3671,7 @@ async function patrolLocate(){
     return;
   }
   PT.lat = pos.lat; PT.lng = pos.lng;
-  PT.matches = [];
-  patrolRender(150, true);          // ฟอร์มขึ้นทันที ถ่ายรูปได้เลยระหว่างรอผลเทียบแผน
+  patrolCoordPaint();
   try{
     const out = await patrolPeek(PT.lat, PT.lng);
     PT.matches = out.matches || [];
@@ -3808,7 +3809,6 @@ function patrolPhotoHtml(){
 }
 
 function patrolFormHtml(){
-  const mapLink = `https://www.google.com/maps/search/?api=1&query=${PT.lat},${PT.lng}`;
   return `
     <div class="card">
       <div class="plabel">รูปที่พบ</div>
@@ -3827,11 +3827,23 @@ function patrolFormHtml(){
       <div class="plabel" style="margin-top:14px">หมายเหตุ</div>
       <input class="inp" id="ptNote" placeholder="เช่น ต้นใหญ่พาดสาย ริมถนนสายบ้านบากัน" style="width:100%">
 
-      <button class="btn" id="ptSend" style="margin-top:14px;width:100%;height:46px" onclick="patrolSubmit()">ส่งเรื่อง</button>
-      <div class="sub" style="margin-top:8px;text-align:center">
-        พิกัด ${esc(PT.lat)}, ${esc(PT.lng)} · <a href="${mapLink}" target="_blank" rel="noopener">ดูบนแผนที่</a>
-      </div>
+      <button class="btn" id="ptSend" style="margin-top:14px;width:100%;height:46px"
+        onclick="patrolSubmit()" ${PT.lat ? '' : 'disabled'}>ส่งเรื่อง</button>
+      <div class="sub" id="ptCoord" style="margin-top:8px;text-align:center">${patrolCoordHtml()}</div>
     </div>`;
+}
+
+/* บรรทัดพิกัดใต้ปุ่มส่ง ระหว่างที่ยังไม่ได้พิกัดให้บอกว่ากำลังหาอยู่ */
+function patrolCoordHtml(){
+  if(!PT.lat) return `<span style="display:inline-flex;align-items:center;gap:6px">
+    <span class="spin dark" style="width:12px;height:12px"></span>กำลังหาตำแหน่งที่ตั้ง… ถ่ายรูปรอไว้ได้เลย</span>`;
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${PT.lat},${PT.lng}`;
+  return `พิกัด ${esc(PT.lat)}, ${esc(PT.lng)} · <a href="${mapLink}" target="_blank" rel="noopener">ดูบนแผนที่</a>`;
+}
+
+function patrolCoordPaint(){
+  const c = $('#ptCoord'); if(c) c.innerHTML = patrolCoordHtml();
+  const b = $('#ptSend');  if(b) b.disabled = !PT.lat;
 }
 
 function patrolPick(){
