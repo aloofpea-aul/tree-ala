@@ -497,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-17a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-17b';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -2859,7 +2859,9 @@ window.addEventListener('online', flushQueue);
 const MONTHS_TH = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
                    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const CON_COLORS = ['#1F6FB2', '#C2600C', '#7D3FA6', '#2A7D6E'];
-const GROUP_COLORS = { '1': '#4A1D62', '2': '#6D2E8E', '3': '#9A6BBE', '4': '#C4A8D9' };
+/* สีกลุ่มแผนงาน — เดิมเป็นม่วงไล่เฉดเดียวกัน บนแผนที่จริงมันกลืนกันจนแยกไม่ออก
+   เปลี่ยนเป็นสี่สีคนละโทน เลือกชุดที่คนตาบอดสีก็ยังแยกออก และเข้มพอบนพื้นแผนที่สีอ่อน */
+const GROUP_COLORS = { '1': '#0072B2', '2': '#D55E00', '3': '#0A8A5F', '4': '#B23A85' };
 const DIM = '#BDB8AE';
 
 let mapFilter = { mode: 'contractor', con: '', month: '', group: '', sys: '', geo: 'real', detail: 'line' };
