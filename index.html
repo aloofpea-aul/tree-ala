@@ -497,7 +497,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-14j';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-16a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -650,7 +650,11 @@ const READ_ACTIONS = ['bootstrap','version','sldPoints'];
 const READ_FNS = ['patrolList','patrolSummary','patrolNear','committeeGet','payReport','payGroups','payDocNo'];
 
 function apiMayRetry(action, payload){
-  if(action === 'tree2') return READ_FNS.indexOf(String(payload.fn||'')) >= 0;
+  if(action === 'tree2'){
+    /* patrol ที่ส่ง peek มาเป็นการค้นหาเฉย ๆ ไม่ได้บันทึกอะไร ลองซ้ำได้ */
+    if(String(payload.fn||'') === 'patrol') return !!payload.peek;
+    return READ_FNS.indexOf(String(payload.fn||'')) >= 0;
+  }
   return READ_ACTIONS.indexOf(action) >= 0;
 }
 
@@ -3637,13 +3641,13 @@ async function tree2(fn, payload = {}){
 }
 
 /* ---------- 1. พาโทรลต้นไม้ ---------- */
-let PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false };
+let PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false, radius:150 };
 
 function patrolCanOpen(){ return !!(S.user && S.token); }
 
 async function openPatrol(){
   if(!patrolCanOpen()){ toast('กรุณาเข้าสู่ระบบก่อน'); return; }
-  PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false };
+  PT = { lat:'', lng:'', matches:[], photo:'', fileName:'', busy:false, radius:150 };
   openSheet('พาโทรลต้นไม้', 'ถ่ายรูปตรงไหนก็ได้ ระบบเทียบพิกัดกับแผนให้เอง', `
     <div id="ptBody">
       <div class="card"><div class="sub">กำลังขอตำแหน่งที่ตั้งจากเครื่อง…</div></div>
@@ -3665,14 +3669,45 @@ async function patrolLocate(){
     return;
   }
   PT.lat = pos.lat; PT.lng = pos.lng;
-  box.innerHTML = `<div class="card"><div class="sub">ได้พิกัดแล้ว กำลังเทียบกับแผนปี ${esc(S.year)}…</div></div>`;
+  PT.matches = [];
+  patrolRender(150, true);          // ฟอร์มขึ้นทันที ถ่ายรูปได้เลยระหว่างรอผลเทียบแผน
   try{
-    const out = await tree2('patrol', {peek:1, lat:PT.lat, lng:PT.lng, year:S.year});
+    const out = await patrolPeek(PT.lat, PT.lng);
     PT.matches = out.matches || [];
-    patrolRender(out.radius || 100);
+    patrolRender(out.radius || 150);
   }catch(e){
-    box.innerHTML = `<div class="card"><div class="sub">${esc(e.message)}</div>
-      <button class="btn" style="margin-top:12px;width:100%" onclick="patrolLocate()">ลองใหม่</button></div>`;
+    const h = $('#ptHead');
+    if(h) h.innerHTML = `<div class="card" style="border-left:4px solid var(--warn)">
+      <div class="sub" style="margin-bottom:10px">เทียบกับแผนไม่สำเร็จ — ${esc(e.message)}</div>
+      <div class="sub" style="margin-bottom:10px">ส่งเรื่องได้ตามปกติ ระบบจะเก็บเป็นข้อมูลนอกแผนไว้ให้</div>
+      <button class="btn ghost" style="width:100%;height:38px" onclick="patrolRetryPeek()">ลองเทียบใหม่</button></div>`;
+  }
+}
+
+/* ผลเทียบพิกัดกับแผนของจุดเดิม คำตอบไม่เปลี่ยนจนกว่าข้อมูลในชีตจะเปลี่ยน
+   ปัดพิกัดที่ทศนิยม 4 ตำแหน่ง (ราว 11 เมตร) ยืนที่เดิมเปิดซ้ำจึงขึ้นทันที */
+async function patrolPeek(lat, lng){
+  const key = 'peek_' + Number(lat).toFixed(4) + '_' + Number(lng).toFixed(4) + '_' + S.year;
+  const now = String(S.stamp || '');
+  const hit = lsGet(key);
+  if(hit && hit.stamp === now && now) return hit.data;
+  const out = await tree2('patrol', {peek:1, lat, lng, year:S.year});
+  lsSet(key, {stamp: now, at: Date.now(), data: out});
+  return out;
+}
+
+async function patrolRetryPeek(){
+  const h = $('#ptHead');
+  if(h) h.innerHTML = `<div class="card"><div class="sub" style="display:flex;align-items:center;gap:8px">
+    <span class="spin dark"></span>กำลังเทียบพิกัดกับแผน…</div></div>`;
+  try{
+    const out = await patrolPeek(PT.lat, PT.lng);
+    PT.matches = out.matches || [];
+    patrolRender(out.radius || 150);
+  }catch(e){
+    if(h) h.innerHTML = `<div class="card" style="border-left:4px solid var(--warn)">
+      <div class="sub" style="margin-bottom:10px">ยังเทียบไม่สำเร็จ — ${esc(e.message)}</div>
+      <button class="btn ghost" style="width:100%;height:38px" onclick="patrolRetryPeek()">ลองอีกครั้ง</button></div>`;
   }
 }
 
@@ -3706,11 +3741,24 @@ function roundOneLine(r){
                         : ('รอบที่ ' + r.nextNo + ' อีก ' + r.daysLeft + ' วัน');
 }
 
-function patrolRender(radius){
+/* แยกเป็นสองส่วน หัวเรื่อง (ผลเทียบกับแผน) กับฟอร์ม (รูป ระดับ หมายเหตุ)
+   ฟอร์มขึ้นทันทีตั้งแต่ได้พิกัด จะได้ถ่ายรูปได้เลยโดยไม่ต้องรอผลเทียบแผน
+   พอผลเทียบมาถึงค่อยเติมเฉพาะหัวเรื่อง รูปกับหมายเหตุที่กรอกไว้จึงไม่หาย */
+function patrolRender(radius, pending){
   const box = $('#ptBody');
   if(!box) return;
+  if(radius !== undefined) PT.radius = radius;
+  if(!$('#ptForm')) box.innerHTML = `<div id="ptHead"></div><div id="ptForm">${patrolFormHtml()}</div>`;
+  const h = $('#ptHead');
+  if(h) h.innerHTML = pending ? `
+    <div class="card" style="border-left:4px solid var(--line)">
+      <div class="sub" style="display:flex;align-items:center;gap:8px">
+        <span class="spin dark"></span>กำลังเทียบพิกัดกับแผนปี ${esc(S.year)}… ถ่ายรูปรอไว้ก่อนได้เลย</div>
+    </div>` : patrolHeadHtml(PT.radius);
+}
+
+function patrolHeadHtml(radius){
   const top = PT.matches[0];
-  const mapLink = `https://www.google.com/maps/search/?api=1&query=${PT.lat},${PT.lng}`;
 
   const head = top ? `
     <div class="card" style="border-left:4px solid var(--ok)">
@@ -3749,13 +3797,22 @@ function patrolRender(radius){
         <span class="pill p-gray">${esc(m.distM)} ม.</span></div>`).join('')}
     </div>` : '';
 
-  box.innerHTML = head + more + `
+  return head + more;
+}
+
+function patrolPhotoHtml(){
+  return PT.photo
+    ? `<img src="${PT.photo}" alt="รูปที่ถ่าย" style="width:100%;border-radius:10px;display:block">
+       <button class="btn ghost" style="margin-top:8px;width:100%;height:38px" onclick="patrolPick()">ถ่ายใหม่</button>`
+    : `<button class="btn" style="width:100%;height:46px" onclick="patrolPick()">ถ่ายรูป</button>`;
+}
+
+function patrolFormHtml(){
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${PT.lat},${PT.lng}`;
+  return `
     <div class="card">
       <div class="plabel">รูปที่พบ</div>
-      <div id="ptPhoto">${PT.photo
-        ? `<img src="${PT.photo}" alt="รูปที่ถ่าย" style="width:100%;border-radius:10px;display:block">
-           <button class="btn ghost" style="margin-top:8px;width:100%;height:38px" onclick="patrolPick()">ถ่ายใหม่</button>`
-        : `<button class="btn" style="width:100%;height:46px" onclick="patrolPick()">ถ่ายรูป</button>`}</div>
+      <div id="ptPhoto">${patrolPhotoHtml()}</div>
 
       <div class="plabel" style="margin-top:14px">ระดับเรื่อง</div>
       <div style="display:flex;gap:8px">
@@ -3785,7 +3842,8 @@ function patrolPick(){
     try{
       toast('กำลังย่อรูป…');
       PT.photo = await shrinkImage(inp.files[0]);
-      patrolRender();
+      const ph = $('#ptPhoto');          // เปลี่ยนเฉพาะช่องรูป หมายเหตุที่พิมพ์ไว้จะได้ไม่หาย
+      if(ph) ph.innerHTML = patrolPhotoHtml(); else patrolRender();
     }catch(e){ toast('อ่านรูปไม่สำเร็จ'); }
   };
   inp.click();
@@ -3896,7 +3954,8 @@ function plCacheClear(){
   try{
     for(let i = localStorage.length - 1; i >= 0; i--){
       const k = localStorage.key(i);
-      if(k && (k.indexOf(LS + '_pl_') === 0 || k.indexOf(LS + '_near_') === 0)) localStorage.removeItem(k);
+      if(k && (k.indexOf(LS + '_pl_') === 0 || k.indexOf(LS + '_near_') === 0
+               || k.indexOf(LS + '_peek_') === 0)) localStorage.removeItem(k);
     }
   }catch(e){}
   PL.near = {};
