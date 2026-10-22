@@ -133,6 +133,19 @@ tr.click:hover{background:#FBF8FD;cursor:pointer}
 .modeseg button.on{background:#fff;color:var(--pea);font-weight:600}
 .maplegend{position:absolute;left:12px;bottom:12px;z-index:20;background:rgba(255,255,255,.96);padding:10px 12px;border-radius:10px;border:1px solid var(--line);font-size:12px;line-height:1.9;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .maplegend i{display:inline-block;width:20px;height:5px;border-radius:3px;vertical-align:middle;margin-right:7px}
+.arbtn{border:1px solid #C98A16;background:#FFF8E8;color:#8A5E00;border-radius:9px;padding:7px 12px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.arbtn.on{background:#C98A16;border-color:#C98A16;color:#fff;font-weight:600}
+.arbtn.undo{border-color:#B4402E;background:#FBECE8;color:#8A2E20}
+.arpanel{position:absolute;left:12px;top:12px;z-index:21;background:rgba(255,255,255,.97);border:1px solid #D9D5CC;border-radius:10px;padding:9px 11px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.14);max-width:min(320px,74vw)}
+.arpanel .n{display:block;color:var(--pea);margin-bottom:7px}
+.arpanel .r{display:flex;gap:5px;flex-wrap:wrap}
+.arpanel button{border:1px solid #D9D5CC;background:#fff;border-radius:7px;padding:5px 9px;font-size:11.5px;cursor:pointer;font-family:inherit;color:#55504A}
+.arpanel button.ok{background:var(--pea);border-color:var(--pea);color:#fff;font-weight:600}
+.arpanel button:disabled{opacity:.42;cursor:default}
+.arln{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0}
+.arln .sw{display:inline-block;width:13px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.artg{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12.5px;padding:7px 0;border-top:1px solid #EFEBE4}
+.artg input{width:19px;height:19px;accent-color:var(--pea)}
 /* --- ชั้นกำลังโหลด --- */
 .busy{position:absolute;inset:0;background:rgba(246,245,241,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:70;text-align:center;padding:24px}
 .busy .msg{font-family:'Kanit',sans-serif;font-size:16px;font-weight:500}
@@ -497,7 +510,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-17b';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-10-22a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -646,6 +659,8 @@ function netBar(on){
    คำสั่งที่แค่อ่านข้อมูล ถ้าพลาดจะลองใหม่ให้เองหนึ่งครั้ง
    คำสั่งที่บันทึกข้อมูลจะไม่ลองซ้ำ กันบันทึกซ้ำสองรอบ */
 const API_TIMEOUT = 20000;
+/* บางคำสั่งเขียนทีเดียวหลายสิบแถว ให้เวลานานกว่าปกติ จะได้ไม่ตัดกลางคัน */
+const SLOW_ACTIONS = { saveLineFixBulk: 60000 };
 const READ_ACTIONS = ['bootstrap','version','sldPoints'];
 const READ_FNS = ['patrolList','patrolSummary','patrolNear','committeeGet','payReport','payGroups','payDocNo'];
 
@@ -677,15 +692,16 @@ function apiNetMsg(e){
 
 async function api(action, payload={}){
   const body = Object.assign({action, user:S.user?S.user.name:'', token:S.token}, payload);
+  const ms = SLOW_ACTIONS[action] || API_TIMEOUT;
   netBar(true);
   let out;
   try{
     try{
-      out = await apiOnce(body, API_TIMEOUT);
+      out = await apiOnce(body, ms);
     }catch(e1){
       if(!apiMayRetry(action, payload)) throw new Error(apiNetMsg(e1));
       await new Promise(r => setTimeout(r, 800));
-      try{ out = await apiOnce(body, API_TIMEOUT); }
+      try{ out = await apiOnce(body, ms); }
       catch(e2){ throw new Error(apiNetMsg(e2)); }
     }
   } finally { netBar(false); }
@@ -746,7 +762,7 @@ function btnBusy(sel, on, text){
 
 /* หลังบันทึก ข้อมูลในชีตเปลี่ยนแล้ว — เก็บของในจอลงแคชไว้ให้เปิดเร็วเหมือนเดิม
    แต่ล้างเลขรุ่น เพื่อให้คราวหน้าดึงของจริงจากชีตมาทับให้แน่ใจ */
-const WRITE_ACTIONS = ['saveRound','saveJob','savePayment','saveLine','saveLineFix','addFinding'];
+const WRITE_ACTIONS = ['saveRound','saveJob','savePayment','saveLine','saveLineFix','saveLineFixBulk','addFinding'];
 let dirtyTimer = null;
 function markDirty(){
   S.stamp = '';
@@ -3004,6 +3020,9 @@ function renderMapBar(sum){
       <option value="">ระบบ · ทั้งหมด</option>
       ${['HV','MV','LV'].map(x=>`<option ${mapFilter.sys===x?'selected':''}>${x}</option>`).join('')}
     </select>
+    ${mapFilter.geo==='real' ? `<button class="arbtn ${AREA.on?'on':''}" onclick="arToggle()">${
+       AREA.on?'◆ กำลังเลือกพื้นที่':'◇ เลือกพื้นที่'}</button>` : ''}
+    ${AREA.undo ? `<button class="arbtn undo" onclick="arUndoBatch()">คืนค่าชุดล่าสุด ${AREA.undo.n} เส้น</button>` : ''}
     </div>
     <div class="sum">ตรงเงื่อนไข ${pick.length} ใบงาน · ${fmt(pick.reduce((a,j)=>a+num(j.PlanKm),0))} กม.${
       lines.length ? ` · ${lines.length} ไลน์แยก` : (segN ? ` · ${segN} ช่วงสายในแผน` : '')}${
@@ -3504,6 +3523,257 @@ async function renderMap(){
   }else if(drawn && hint){
     hint.remove();
   }
+
+  if(AREA.on) arPaint();      /* Overlays.clear() ลบกรอบที่วางไว้ไปด้วย ต้องวาดคืน */
+}
+
+/* ===== เลือกช่วงสายเป็นพื้นที่ แล้วเปลี่ยนเจ้าของทีเดียวหลายเส้น =====
+   ไลน์แยกเส้นสั้น ๆ มีเป็นร้อย กำหนดทีละเส้นไม่ไหว จึงให้แตะวางจุดมุมบนแผนที่
+   เป็นรูปหลายเหลี่ยม แล้วจับทุกช่วงสายที่ "กึ่งกลางเส้น" ตกอยู่ในกรอบ
+   กันพลาดไว้สองชั้น — ไม่แตะไลน์เมน และไม่ทับเส้นที่เคยกำหนดเองไว้แล้ว
+   บันทึกเป็นชุดเดียวยิงเซิร์ฟเวอร์ครั้งเดียว และเก็บค่าเดิมไว้ให้กดคืนได้ทั้งชุด */
+let AREA = { on:false, pts:[], shapes:[], hits:[], bound:false,
+           noMain:true, noFixed:true, undo:null, busy:false };
+
+function arReady(){
+  return mapFilter.geo === 'real' && S.mv && Object.keys(S.mv).length > 0;
+}
+
+/* ยิงรังสีไปทางขวา นับจำนวนครั้งที่ตัดขอบ คี่แปลว่าอยู่ในกรอบ */
+function arIn(p, ring){
+  let inside = false;
+  for(let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+    const xi = ring[i].lon, yi = ring[i].lat, xj = ring[j].lon, yj = ring[j].lat;
+    if(((yi > p.lat) !== (yj > p.lat)) &&
+       (p.lon < (xj - xi) * (p.lat - yi) / ((yj - yi) || 1e-12) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function arMid(seg){ return seg[Math.floor(seg.length / 2)]; }
+function arKm(seg){
+  let km = 0;
+  for(let i = 1; i < seg.length; i++){
+    const dy = (seg[i].lat - seg[i-1].lat) * 110.6;
+    const dx = (seg[i].lon - seg[i-1].lon) * 110.2;   /* ที่ละติจูดราว 8 องศา */
+    km += Math.sqrt(dx*dx + dy*dy);
+  }
+  return km;
+}
+
+function arToggle(){
+  if(AREA.on){ arStop(); return; }
+  if(!arReady()){ toast('โหมดนี้ใช้กับ "แนวสายจริงจาก GIS" เท่านั้น', 3600); return; }
+  AREA.on = true; AREA.pts = []; AREA.hits = [];
+  arBind(); arPaint();
+  renderMapBar(summarize());
+  toast('แตะบนแผนที่เพื่อวางจุดมุม อย่างน้อย 3 จุด · เลื่อนแผนที่ได้ตามปกติ', 4200);
+}
+
+function arStop(){
+  AREA.on = false; AREA.pts = []; AREA.hits = [];
+  arClear();
+  renderMapBar(summarize());
+}
+
+function arClear(){
+  const map = S.map;
+  AREA.shapes.forEach(o => { try{ map.Overlays.remove(o); }catch(e){} });
+  AREA.shapes = [];
+  const c = document.getElementById('arPanel'); if(c) c.remove();
+}
+
+function arUndoPt(){ AREA.pts.pop(); arPaint(); }
+function arReset(){ AREA.pts = []; AREA.hits = []; arPaint(); }
+
+function arBind(){
+  const map = S.map;
+  if(!map || AREA.bound) return;
+  try{
+    map.Event.bind('click', function(){
+      if(!AREA.on) return;
+      let loc = null;
+      try{ loc = map.location(longdo.LocationMode.Pointer); }catch(e){}
+      if(!loc || loc.lon === undefined) return;
+      AREA.pts.push({ lon: loc.lon, lat: loc.lat });
+      arPaint();
+    });
+    AREA.bound = true;
+  }catch(e){}
+}
+
+function arPaint(){
+  const map = S.map; if(!map) return;
+  arClear();
+  const ring = AREA.pts;
+  try{
+    if(ring.length >= 3){
+      AREA.shapes.push(new longdo.Polygon(ring.map(p=>({lon:p.lon,lat:p.lat})),
+        { lineWidth:3, lineColor:'#C98A16', fillColor:'rgba(201,138,22,0.16)', clickable:false }));
+    }else if(ring.length === 2){
+      AREA.shapes.push(new longdo.Polyline(ring.map(p=>({lon:p.lon,lat:p.lat})),
+        { lineWidth:3, lineColor:'#C98A16', clickable:false }));
+    }
+  }catch(e){}
+  ring.forEach(p => {
+    try{
+      AREA.shapes.push(new longdo.Marker({lon:p.lon, lat:p.lat}, {
+        icon:{ html:'<div style="width:13px;height:13px;border-radius:99px;background:#fff;border:3px solid #C98A16;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>',
+               offset:{x:6,y:6} } }));
+    }catch(e){}
+  });
+  arCalc();
+  /* เน้นเส้นที่จับได้ให้เห็นชัด ๆ ก่อนกดบันทึก ถ้าเยอะมากข้ามไปกันแผนที่หนืด */
+  if(AREA.hits.length && AREA.hits.length <= 250){
+    AREA.hits.forEach(h => {
+      try{
+        AREA.shapes.push(new longdo.Polyline(
+          S.mv[h.f][h.si].v.map(c => ({lon:c.lon, lat:c.lat})),
+          { lineWidth:9, lineColor:'rgba(201,138,22,0.55)', clickable:false }));
+      }catch(e){}
+    });
+  }
+  AREA.shapes.forEach(o => { try{ map.Overlays.add(o); }catch(e){} });
+  arPanel();
+}
+
+function arCalc(){
+  AREA.hits = [];
+  if(AREA.pts.length < 3 || !S.mv) return;
+  const fixBySeg = {};
+  (S.data.linefix || []).forEach(x => { fixBySeg[String(x.SegKey)] = String(x.JobID); });
+  Object.keys(S.mv).forEach(f => {
+    const bb = (S.backbone && S.backbone[f]) || null;
+    S.mv[f].forEach((item, si) => {
+      const seg = item && item.v;
+      if(!seg || seg.length < 2) return;
+      if(AREA.noMain && bb && bb.has(si)) return;
+      const key = segKeyOf(f, si);
+      if(AREA.noFixed && fixBySeg[key]) return;
+      if(!arIn(arMid(seg), AREA.pts)) return;
+      AREA.hits.push({ key, f, si, km: arKm(seg), was: fixBySeg[key] || '' });
+    });
+  });
+}
+
+function arPanel(){
+  const host = $('#v-map'); if(!host) return;
+  let b = document.getElementById('arPanel');
+  if(!b){ b = el('<div id="arPanel" class="arpanel"></div>'); host.appendChild(b); }
+  const need = 3 - AREA.pts.length;
+  const head = AREA.pts.length < 3
+    ? `วางจุดมุมอีก ${need} จุด`
+    : `อยู่ในกรอบ <b>${AREA.hits.length}</b> ช่วงสาย`;
+  b.innerHTML = `<span class="n">${head}</span>
+    <div class="r">
+      <button onclick="arUndoPt()" ${AREA.pts.length?'':'disabled'}>ถอยจุด</button>
+      <button onclick="arReset()" ${AREA.pts.length?'':'disabled'}>ล้างกรอบ</button>
+      <button class="ok" onclick="arOpen()" ${AREA.hits.length?'':'disabled'}>เลือกเส้นในกรอบ</button>
+      <button onclick="arStop()">ออก</button>
+    </div>`;
+}
+
+function arSetOpt(k, v){ AREA[k] = !!v; arPaint(); arBody(); }
+
+function arOpen(){
+  if(!AREA.hits.length){ toast('ยังไม่มีเส้นในกรอบ'); return; }
+  openSheet('เปลี่ยนเจ้าของทีเดียวทั้งชุด', 'เลือกจากกรอบบนแผนที่', '<div id="arBody"></div>');
+  arBody();
+}
+
+function arBody(){
+  const box = document.getElementById('arBody'); if(!box) return;
+  const sum = summarize();
+  const jobs = sum.jobs.filter(j => j.JobType !== 'เฉพาะคราว');
+  const byId = {}; sum.jobs.forEach(j => { byId[j.JobID] = j; });
+
+  const byF = {}, byWas = {};
+  let km = 0;
+  AREA.hits.forEach(h => {
+    byF[h.f] = (byF[h.f] || 0) + 1;
+    byWas[h.was] = (byWas[h.was] || 0) + 1;
+    km += h.km;
+  });
+  const over = AREA.hits.filter(h => h.was).length;
+
+  const owner = Object.keys(byWas).sort((a,b)=>byWas[b]-byWas[a]).map(w => {
+    const j = byId[w];
+    const col = !w ? '#9A958C'
+      : (mapFilter.mode === 'contractor' ? contractorColor(j && j.Contractor)
+         : GROUP_COLORS[String(j && j.MonthGroup)] || '#9A958C');
+    const nm = w ? `${esc((j && j.MJMNo) || w)}${j && j.MonthGroup ? ' · กลุ่ม '+esc(j.MonthGroup) : ''}`
+                 : 'ระบบเดาให้ ยังไม่เคยกำหนดเอง';
+    return `<div class="arln"><span><i class="sw" style="background:${col}"></i>${nm}</span><b>${byWas[w]} เส้น</b></div>`;
+  }).join('');
+
+  box.innerHTML = `
+    <div class="card">
+      <div class="kanit" style="font-size:17px">เลือกไว้ ${AREA.hits.length} ช่วงสาย</div>
+      <div class="sub" style="margin-bottom:10px">${
+        Object.keys(byF).sort().map(f=>`${esc(f)} ${byF[f]} เส้น`).join(' · ')} · รวม ${fmt(km)} กม.</div>
+      <div style="border:1px solid #E6E2DA;border-radius:9px;padding:8px 10px;background:#FBFAF7;margin-bottom:12px">
+        <div class="sub" style="margin-bottom:3px">เจ้าของตอนนี้</div>${owner}
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="arJob">เปลี่ยนเป็นใบงาน</label>
+        <select class="inp" id="arJob" style="width:100%">
+          <option value="">— ล้างที่กำหนดเอง กลับไปใช้ค่าที่ระบบคำนวณ —</option>
+          ${jobs.map(j=>`<option value="${esc(j.JobID)}">${esc(j.MJMNo)} · ${esc(j.FeederID)} · ${esc(j.Contractor)||'ยังไม่ระบุ'}${j.MonthGroup?' · กลุ่ม '+esc(j.MonthGroup):''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="artg"><span>เฉพาะไลน์แยก ไม่แตะไลน์เมน</span>
+        <input type="checkbox" ${AREA.noMain?'checked':''} onchange="arSetOpt('noMain', this.checked)"></div>
+      <div class="artg"><span>ไม่ทับเส้นที่เคยกำหนดเองไว้แล้ว</span>
+        <input type="checkbox" ${AREA.noFixed?'checked':''} onchange="arSetOpt('noFixed', this.checked)"></div>
+      ${over ? `<div class="sub" style="color:#8A2E20;margin-top:8px">ในชุดนี้มี <b>${over} เส้น</b> ที่เคยกำหนดเองไว้แล้ว กดบันทึกจะทับของเดิม</div>` : ''}
+      <button class="btn ok" style="width:100%;margin-top:12px" id="arSave" onclick="arSave()">บันทึกทั้ง ${AREA.hits.length} เส้น</button>
+      <div class="sub" style="margin-top:8px">บันทึกครั้งเดียวจบ ไม่ได้ยิงทีละเส้น · ถ้าพลาด กดปุ่ม <b>คืนค่าชุดล่าสุด</b> บนแถบแผนที่ได้</div>
+    </div>`;
+}
+
+function arApplyLocal(items){
+  const m = {};
+  (S.data.linefix || []).forEach(x => { m[String(x.SegKey)] = x; });
+  items.forEach(it => {
+    if(!it.j){ delete m[it.k]; return; }
+    m[it.k] = Object.assign({}, m[it.k] || {SegKey: it.k}, {SegKey: it.k, JobID: it.j});
+  });
+  S.data.linefix = Object.keys(m).map(k => m[k]);
+}
+
+async function arSave(){
+  if(AREA.busy || !AREA.hits.length) return;
+  const sel = document.getElementById('arJob');
+  const jobId = sel ? sel.value : '';
+  const btn = document.getElementById('arSave');
+  AREA.busy = true;
+  if(btn){ btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+  const items = AREA.hits.map(h => ({ k: h.key, j: jobId }));
+  const back  = AREA.hits.map(h => ({ k: h.key, j: h.was }));
+  try{
+    await api('saveLineFixBulk', { items });
+    arApplyLocal(items);
+    AREA.undo = { items: back, n: items.length };
+    closeSheet(); arStop();
+    toast(`บันทึกแล้ว ${items.length} เส้น`, 4200);
+    renderMap();
+  }catch(e){
+    toast(e.message, 4600);
+    if(btn){ btn.disabled = false; btn.textContent = 'บันทึกทั้ง ' + AREA.hits.length + ' เส้น'; }
+  }finally{ AREA.busy = false; }
+}
+
+async function arUndoBatch(){
+  if(!AREA.undo || AREA.busy) return;
+  const u = AREA.undo;
+  AREA.busy = true;
+  try{
+    await api('saveLineFixBulk', { items: u.items });
+    arApplyLocal(u.items);
+    AREA.undo = null;
+    toast(`คืนค่าเดิมแล้ว ${u.n} เส้น`, 3600);
+    renderMap();
+  }catch(e){ toast(e.message, 4600); }
+  finally{ AREA.busy = false; }
 }
 
 /* ============ วัดความสูงจอจริง ============
