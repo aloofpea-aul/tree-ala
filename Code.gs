@@ -13,7 +13,7 @@
 // ====== ตั้งค่า ======
 const DB_ID = '1DWfex5lBumS0rV4uWyLG-h8Q3V2AdFgk7gA01lnMeYY';   // ชีต TreeALA_DB ที่สร้างไว้ให้แล้ว
 const APP_CODE = 'TREE';                          // รหัสแอปในคอลัมน์ Apps ของชีต Members
-const TOKEN_SALT = 'tree-ala-2569';               // เปลี่ยนเป็นข้อความอะไรก็ได้ของท่านเอง
+const TOKEN_SALT = '';   // ไม่ใช้แล้ว — ระบบจริงลงชื่อ token ด้วยความลับใน Script Properties (TREE_TOKEN_SECRET) ดู Apps Script โปรเจกต์ TreeALA_API
 const SLD_DEFAULT_ID = '1m7dL33F1JwdK60G640xLjlWntkPrY5ulb4tpkpf04LU';  // ชีต SLD อ่าวลึก - ฐานข้อมูล
 
 // ====== ตารางและคอลัมน์ ======

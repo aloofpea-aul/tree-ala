@@ -510,7 +510,7 @@ const HUB_GAS  = 'https://script.google.com/macros/s/AKfycbzqsOqJJQlF4SS1UX_YM6h
 const HUB_USER = 'pea_aoluek_username';
 const HUB_PASS = 'pea_aoluek_password';
 const APP_CODE = 'tree';
-const BUILD = '2026-10-22a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
+const BUILD = '2026-11-02a';   // เลขรุ่นไฟล์ ใช้เช็กว่าเครื่องโหลดไฟล์ใหม่แล้วจริง
 
 /* ============ สถานะในหน่วยความจำ ============ */
 const S = { user:null, token:null, year:'2569', data:null, view:'dash', map:null, layers:null, sld:null,
@@ -705,6 +705,7 @@ async function api(action, payload={}){
       catch(e2){ throw new Error(apiNetMsg(e2)); }
     }
   } finally { netBar(false); }
+  if(out && !out.ok && /กรุณาเข้าสู่ระบบ/.test(String(out.error||''))) authExpired();
   if(!out || !out.ok) throw new Error((out && out.error) || 'เกิดข้อผิดพลาด');
   if(WRITE_ACTIONS.indexOf(action) >= 0) markDirty();
   return out;
@@ -853,6 +854,17 @@ async function doLogin(ev){
   }
 }
 
+/* token ใช้ไม่ได้แล้ว (เช่น ระบบเปลี่ยนวิธีลงชื่อ token) → ล้างการเข้าระบบในเครื่องแล้วโหลดใหม่
+   ถ้าเครื่องจำบัญชีศูนย์รวมงานไว้ จะเข้าสู่ระบบใหม่ให้อัตโนมัติ — กันวนซ้ำไม่เกิน 1 ครั้งต่อนาที */
+function authExpired(){
+  try{
+    const last = Number(sessionStorage.getItem('tree_authexp')||0);
+    if(Date.now() - last < 60000) return;
+    sessionStorage.setItem('tree_authexp', String(Date.now()));
+  }catch(e){}
+  localStorage.removeItem(LS+'_auth');
+  location.reload();
+}
 function logout(){
   localStorage.removeItem(LS+'_auth');
   try{ sessionStorage.setItem('tree_skipauto','1'); }catch(e){}
